@@ -154,14 +154,109 @@ def _recognize_clause(clause: str, index: int) -> UnresolvedAction:
     raise ClarificationRequired(ClarificationCode.MISSING_INTENT, index)
 
 
-def _recognize(transcript: str) -> tuple[UnresolvedAction, ...]:
+# Word-order-free fallback vocabulary. A credit word wins over a "gave" verb: "udhaar diya" is a credit.
+_CREDIT_WORDS = {"credit", "udhaar", "udhar", "udhaari", "उधार", "उधारी"}
+_PAYMENT_WORDS = {
+    "paid", "pay", "pays", "payment", "received", "receive", "got", "returned", "deposited",
+    "diya", "diye", "di", "jama", "lautaye", "दिया", "दिए", "दिये", "दी", "जमा", "लौटाए",
+}
+_FILLER = {
+    "to", "for", "from", "of", "on", "by", "via", "in", "at", "with", "me", "my", "a", "an", "the",
+    "record", "add", "log", "entry", "give", "gave", "given", "took", "take", "taken", "has", "have",
+    "is", "was", "please", "ko", "ne", "se", "ka", "ke", "ki", "mein", "main", "hai", "hain", "tha",
+    "को", "ने", "से", "का", "के", "की", "में", "है", "हैं", "था", "khate", "khata", "खाते", "खाता",
+    "account", "ji", "जी", "kar", "karo", "कर", "करो",
+}
+_NEGATION = {"not", "don't", "dont", "no", "cancel", "mat", "nahi", "nahin", "मत", "नहीं", "ना"}
+_WRITE_PHRASE = re.compile(rf"\b{_WRITE}|\b(?:de|दे) (?:do|diya|दो|दिया)\b", re.IGNORECASE)
+
+
+def _amount_window(words: list[str]) -> tuple[int, int, int] | None:
+    """The longest run of words that reads as one amount, or None when absent or ambiguous."""
+    found: list[tuple[int, int, int]] = []
+    for size in range(len(words), 0, -1):
+        for start in range(len(words) - size + 1):
+            try:
+                found.append((start, start + size, parse_amount_paise(" ".join(words[start:start + size]))))
+            except AmountError:
+                pass
+        if found:
+            break
+    return found[0] if len(found) == 1 else None
+
+
+def _fill_slots(clause: str, customers: Sequence[CustomerIdentity]) -> UnresolvedAction | None:
+    """Read intent, amount, method and a known customer from a clause in any word order."""
+    text = _WRITE_PHRASE.sub(" ", clause)
+    words = [word.strip(",.?!:") for word in text.split()]
+    words = [word for word in words if word]
+    folded = [word.casefold() for word in words]
+    if any(word in _NEGATION for word in folded):
+        return None
+    if any(word in _CREDIT_WORDS for word in folded):
+        intent = Intent.CREDIT
+    elif any(word in _PAYMENT_WORDS for word in folded):
+        intent = Intent.PAYMENT
+    else:
+        return None
+    method = None
+    if intent == Intent.PAYMENT:
+        if any(word in _CASH for word in folded):
+            method = PaymentMethod.CASH
+        elif any(word in _UPI for word in folded):
+            method = PaymentMethod.UPI
+
+    # The longest span of words that starts a known customer's name, e.g. "Ramesh" or "Ramesh Kumar".
+    name_span: tuple[int, int] | None = None
+    keys = [_name_key(customer.name) for customer in customers]
+    for start in range(len(words)):
+        for end in range(len(words), start, -1):
+            span = _name_key(" ".join(words[start:end]))
+            if any(key[: len(span)] == span for key in keys) and (
+                    name_span is None or end - start > name_span[1] - name_span[0]):
+                name_span = (start, end)
+                break
+
+    vocabulary = _CREDIT_WORDS | _PAYMENT_WORDS | _FILLER | _CASH | _UPI
+    rest = [i for i, word in enumerate(folded)
+            if word not in vocabulary and not (name_span and name_span[0] <= i < name_span[1])]
+    if name_span:
+        # With a known customer, every remaining word must be the amount; nothing is guessed or skipped.
+        try:
+            amount = parse_amount_paise(" ".join(words[i] for i in rest))
+        except AmountError:
+            return None
+        name = " ".join(words[name_span[0]:name_span[1]])
+    else:
+        window = _amount_window([words[i] for i in rest])
+        if window is None:
+            return None
+        start, end, amount = window
+        # Unknown words left over are the spoken name; resolution reports it as not found.
+        leftover = [words[i] for position, i in enumerate(rest) if not start <= position < end]
+        name = " ".join(leftover) or None
+    if name and name.casefold() in _PRONOUNS:
+        return UnresolvedAction(intent, None, amount, method, refers_to_previous_customer=True)
+    return UnresolvedAction(intent, name, amount, method)
+
+
+def _recognize(transcript: str, customers: Sequence[CustomerIdentity] = ()) -> tuple[UnresolvedAction, ...]:
     text = " ".join(normalize("NFC", transcript).split())
     text = text.removesuffix("।").strip()
-    clauses = _SPLIT_CLAUSES.split(text)
-    return tuple(
-        _recognize_clause(clause.strip().removesuffix(".").removesuffix("?").strip(), index)
-        for index, clause in enumerate(clauses, start=1)
-    )
+    actions = []
+    for index, clause in enumerate(_SPLIT_CLAUSES.split(text), start=1):
+        clause = clause.strip().removesuffix(".").removesuffix("?").strip()
+        try:
+            actions.append(_recognize_clause(clause, index))
+        except ClarificationRequired as error:
+            if error.code not in (ClarificationCode.MISSING_INTENT, ClarificationCode.MISSING_AMOUNT,
+                                  ClarificationCode.INVALID_AMOUNT):
+                raise
+            fallback = _fill_slots(clause, customers)
+            if fallback is None:
+                raise
+            actions.append(fallback)
+    return tuple(actions)
 
 
 def _resolve_customer(
@@ -191,7 +286,7 @@ def parse_transcript(
 ) -> list[ParsedAction]:
     """Interpret the whole transcript and resolve each name within the shop's directory."""
     proposed = adapter.interpret(transcript) if adapter is not None else None
-    drafts = tuple(proposed) if proposed is not None else _recognize(transcript)
+    drafts = tuple(proposed) if proposed is not None else _recognize(transcript, customers)
     if not drafts:
         raise ClarificationRequired(ClarificationCode.MISSING_INTENT, 1)
 

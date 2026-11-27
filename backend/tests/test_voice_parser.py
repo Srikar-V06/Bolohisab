@@ -185,6 +185,42 @@ class VoiceApiTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assert_clarification(self.parse(text), code)
 
+    def test_any_word_order_with_a_known_customer(self) -> None:
+        credit, payment = ("CREDIT", None), ("PAYMENT", None)
+        for text, who, paise, (intent, method) in (
+            ("credit 450 to Ramesh", self.ramesh, 45000, credit),
+            ("Ramesh 450 credit", self.ramesh, 45000, credit),
+            ("450 credit Ramesh", self.ramesh, 45000, credit),
+            ("Ramesh took 450 on credit", self.ramesh, 45000, credit),
+            ("udhaar 450 Ramesh", self.ramesh, 45000, credit),
+            ("Ramesh ko saadhe chaar sau udhaar", self.ramesh, 45000, credit),
+            ("रमेश को 450 उधार दिया", self.ramesh, 45000, credit),
+            ("Ramesh ko do sau udhaar de do", self.ramesh, 20000, credit),
+            ("Ramesh 450 rupees credit", self.ramesh, 45000, credit),
+            ("200 received from Ramesh", self.ramesh, 20000, payment),
+            ("Ramesh 200 payment", self.ramesh, 20000, payment),
+            ("got 200 from Suresh in cash", self.suresh, 20000, ("PAYMENT", "CASH")),
+            ("Suresh 200 upi diya", self.suresh, 20000, ("PAYMENT", "UPI")),
+        ):
+            with self.subTest(text=text):
+                action, = self.parse(text)["actions"]
+                self.assertEqual((action["customer"]["id"], action["amount_paise"], action["intent"],
+                                  action["payment_method"]), (who.id, paise, intent, method))
+        both = self.parse("Ramesh 450 credit and Suresh 200 paid")["actions"]
+        self.assertEqual([(a["intent"], a["amount_paise"]) for a in both], [("CREDIT", 45000), ("PAYMENT", 20000)])
+
+    def test_word_order_fallback_never_guesses(self) -> None:
+        for text, code in (
+            ("Mahesh 450 credit", "CUSTOMER_NOT_FOUND"),
+            ("450 credit", "MISSING_CUSTOMER"),
+            ("Ramesh 450 credit 200", "MISSING_INTENT"),
+            ("Ramesh sahab 450 credit", "MISSING_INTENT"),
+            ("Ramesh 450", "MISSING_INTENT"),
+            ("Ramesh ko 450 udhaar mat do", "MISSING_INTENT"),
+        ):
+            with self.subTest(text=text):
+                self.assert_clarification(self.parse(text), code)
+
     def test_any_unclear_clause_blocks_the_entire_draft(self) -> None:
         result = self.parse("Ramesh paid ₹200 in cash and Suresh paid.")
         self.assert_clarification(result, "MISSING_AMOUNT", 2)
