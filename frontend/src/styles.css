@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Manrope Variable", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Manrope Variable", "Noto Sans Devanagari Variable", "Segoe UI", system-ui, sans-serif;
   --color-ink: #172c24;
   --color-muted: #52665b;
   --color-primary: #156c4e;
@@ -59,12 +59,24 @@
     outline-offset: -3px;
   }
 
+  .nav-link span {
+    min-width: 0;
+  }
+
   .shop-card {
     @apply mx-4 mt-auto mb-5 items-center gap-2.5 rounded-xl border border-line bg-surface p-3 lg:mx-5;
   }
 
   .topbar {
-    @apply flex min-h-17 items-center justify-between gap-3 border-b border-line bg-white px-4 sm:px-7 md:min-h-18 xl:px-9;
+    @apply grid min-h-17 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 border-b border-line bg-white px-4 py-2 min-[430px]:grid-cols-[minmax(0,1fr)_auto_auto] min-[430px]:gap-x-3 sm:px-7 md:min-h-18 xl:px-9;
+  }
+
+  .topbar-sample {
+    @apply row-start-2 justify-self-start min-[430px]:row-auto;
+  }
+
+  .language-select {
+    @apply min-h-11 w-full cursor-pointer appearance-none rounded-lg border border-line bg-white py-2 pr-8 pl-8 text-sm font-extrabold text-ink hover:border-primary disabled:cursor-default disabled:opacity-70;
   }
 
   .sample-label,
@@ -107,6 +119,11 @@
     @apply text-[1.1rem] leading-tight font-extrabold tracking-tight;
   }
 
+  :lang(hi) :is(.page-heading, .section-heading, .hero-label) {
+    letter-spacing: normal;
+    line-height: 1.4;
+  }
+
   .panel {
     @apply rounded-[1rem] border border-line bg-white;
     box-shadow: 0 2px 3px #16332605;
@@ -137,6 +154,21 @@
     @apply bg-primary text-white hover:bg-[#125a42];
   }
 
+  .button:disabled {
+    @apply cursor-default opacity-70;
+  }
+
+  .button-outline {
+    @apply border border-line bg-white text-primary hover:bg-surface;
+  }
+
+  .transcript {
+    @apply rounded-xl bg-surface px-4 py-3 leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere];
+  }
+
+  .detail-toggle {
+    @apply min-h-11 cursor-pointer rounded-lg py-2.5 text-sm leading-relaxed font-extrabold text-primary;
+  }
   .voice-art {
     @apply pointer-events-none absolute top-0 right-0 bottom-0 w-[40%] max-w-[26rem] place-items-center;
     background: radial-gradient(circle, #b7f7d44d 1px, transparent 1.5px) 50% 50% / 17px 17px;

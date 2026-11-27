@@ -1,0 +1,98 @@
+{
+  "meta": {
+    "description": "BoloHisaab, a voice-first digital khata for kirana shops."
+  },
+  "app": {
+    "brandLink": "BoloHisaab dashboard",
+    "skip": "Skip to content",
+    "navigation": "Main navigation",
+    "shopWorkspace": "Shop workspace",
+    "workspace": "Workspace",
+    "sampleData": "Sample data",
+    "language": "App language"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "customers": "Customers",
+    "voice-entry": "Voice Entry",
+    "disputes": "Disputes",
+    "reports": "Reports"
+  },
+  "dashboard": {
+    "greeting": "Namaste, {{shopName}}",
+    "intro": "Here’s what’s happening in your khata.",
+    "voiceLabel": "Voice khata",
+    "voiceHeading": "Add to your khata by voice",
+    "voiceIntro": "Try a sample entry and see what it looks like in your ledger.",
+    "tryVoice": "Try voice entry",
+    "statistics": "Khata at a glance",
+    "outstanding": "Outstanding balance",
+    "balanceCount_one": "{{count}} customer owes money",
+    "balanceCount_other": "{{count}} customers owe money",
+    "collected": "Collected this week",
+    "openDisputes": "Open disputes",
+    "awaitingReview": "Awaiting review",
+    "recentActivity": "Recent activity",
+    "recentIntro": "Latest updates to your khata",
+    "todayAt": "Today, {{time}}",
+    "yesterday": "Yesterday",
+    "weeklySummary": "Weekly summary",
+    "weeklyIntro": "Money in and credit given",
+    "thisWeek": "This week"
+  },
+  "customers": {
+    "intro": "A sample of customers and their current khata balances.",
+    "paidUp": "Paid up"
+  },
+  "disputes": {
+    "intro_one": "{{count}} sample entry awaiting review.",
+    "intro_other": "{{count}} sample entries awaiting review.",
+    "confirmAmount": "Customer asked to confirm the amount.",
+    "duplicateEntry": "Customer is checking a duplicate entry."
+  },
+  "reports": {
+    "intro": "Review a sample week of payments and new credit."
+  },
+  "voice": {
+    "intro": "Speak an entry or review a sample payment.",
+    "recordHeading": "Record your voice",
+    "speechLanguage": "Language you’ll speak",
+    "browserService": "Your browser may send audio to its speech service.",
+    "start": "Start recording",
+    "stop": "Stop recording",
+    "listening": "Listening…",
+    "finishing": "Getting your transcript…",
+    "samplePhrase": "Sample phrase",
+    "preview": "Preview entry",
+    "hidePreview": "Hide entry preview",
+    "samplePayment": "Sample payment",
+    "original": "Original transcript",
+    "showEnglish": "English translation",
+    "translationUnavailable": "An English translation is unavailable for this phrase. You can read the original above.",
+    "receiptPreview": "Preview receipt",
+    "listen": "Listen to the confirmation",
+    "stopPlayback": "Stop playback",
+    "errors": {
+      "unsupported": "Voice recording isn’t available in this browser. You can still try the sample entry.",
+      "permission": "Allow microphone access in your browser to record an entry.",
+      "microphone": "No microphone was found. Connect one and try again.",
+      "noSpeech": "We didn’t hear anything. Speak clearly and try again.",
+      "network": "The browser’s speech service is unavailable. Try again in a moment.",
+      "language": "The browser can’t recognise this language. Try the other speech language or the sample entry.",
+      "recognition": "Couldn’t record your voice. Try again or use the sample entry.",
+      "voiceUnavailable": "A voice for this language is unavailable. You can read the confirmation above.",
+      "playback": "Couldn’t play the confirmation. You can read it above."
+    }
+  },
+  "transaction": {
+    "payment": "Payment received",
+    "credit": "Credit added",
+    "customer": "Customer",
+    "amountReceived": "Amount received",
+    "confirmation": {
+      "payment": "Payment of {{amount}} from {{customerName}}.",
+      "credit": "Credit of {{amount}} added for {{customerName}}."
+    },
+    "receipt": "BoloHisaab receipt\nTransaction: {{transactionId}}\nDate: {{date}}\nCustomer: {{customerName}}\nType: {{type}}\nAmount: {{amount}}"
+  }
+}

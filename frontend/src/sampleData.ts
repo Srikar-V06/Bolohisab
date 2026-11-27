@@ -8,6 +8,8 @@ export function formatRupees(amount: number) {
   return rupees.format(amount)
 }
 
+export const shopName = 'Sharma Kirana'
+
 export const dashboard = {
   outstanding: 24_850,
   customersWithBalance: 18,
@@ -26,13 +28,23 @@ export const customers = [
 export type Customer = (typeof customers)[number]
 
 export const activity = [
-  { customer: customers[0], amount: 750, kind: 'Payment received', time: 'Today, 10:42 am' },
-  { customer: customers[1], amount: 320, kind: 'Credit added', time: 'Today, 9:15 am' },
-  { customer: customers[2], amount: 500, kind: 'Payment received', time: 'Yesterday' },
-  { customer: customers[3], amount: 180, kind: 'Credit added', time: 'Yesterday' },
+  { customer: customers[0], amount: 750, kind: 'payment', time: '10:42 am' },
+  { customer: customers[1], amount: 320, kind: 'credit', time: '9:15 am' },
+  { customer: customers[2], amount: 500, kind: 'payment', time: null },
+  { customer: customers[3], amount: 180, kind: 'credit', time: null },
 ] as const
 
 export const disputes = [
-  { customer: customers[1], amount: 320, issue: 'Customer asked to confirm the amount.' },
-  { customer: customers[2], amount: 140, issue: 'Customer is checking a duplicate entry.' },
+  { customer: customers[1], amount: 320, issue: 'confirmAmount' },
+  { customer: customers[2], amount: 140, issue: 'duplicateEntry' },
 ] as const
+
+export const sampleVoice = {
+  transcript: 'Priya Sharma ne 750 rupaye diye.',
+  english: 'Priya Sharma paid 750 rupees.',
+  customerName: customers[0].name,
+  amount: activity[0].amount,
+  kind: activity[0].kind,
+  transactionId: 'BH-DEMO-001',
+  date: '2026-11-27',
+} as const

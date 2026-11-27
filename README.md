@@ -1,6 +1,14 @@
 # BoloHisaab
 
-BoloHisaab is a voice-first digital khata for Indian kirana shops. This foundation includes a responsive dashboard, sample customer balances, a voice entry preview, a dispute list, and a weekly report. The interface uses sample data and the voice preview uses a preset phrase. FastAPI initializes SQLite and exposes a health endpoint. No external API keys are required.
+BoloHisaab is a voice-first digital khata for Indian kirana shops. It includes a responsive dashboard, sample customer balances, a dispute list, a weekly report, and a Voice Entry page with browser recording and a sample payment. FastAPI initializes SQLite and exposes a health endpoint. No external API keys are required.
+
+## Languages and voice
+
+The app starts in Hindi (hi-IN). Use the header to switch to Indian English (en-IN). Voice Entry has its own speech language selector. The browser stores both preferences independently.
+
+Recording uses your browser’s speech recognition service, which may send audio to the browser provider. The transcript is displayed as returned by the browser. English translations are available for the supplied Hindi sample and supported Hindi payment and credit phrases with numeric amounts. Other recordings can still be read in their original form. Confirmation playback uses the browser’s available voices and keeps the confirmation visible when a suitable voice is unavailable.
+
+To add a language, add the frontend locale catalog and register it in the localization module. Verify script rendering and add a font if needed. Add the locale to the speech choices when you have verified browser support. Update the backend language schema once requests support the new locale. Confirmation and receipt templates interpolate the supplied names, amounts, dates, and IDs as text.
 
 ## Run with Docker Compose
 
@@ -56,6 +64,7 @@ Run from `frontend/`:
 
 ```sh
 npm run check
+npm test
 npm run build
 ```
 
