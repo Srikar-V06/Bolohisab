@@ -52,7 +52,7 @@ export default function App() {
         {page.id === 'speak' ? (
           <div className="brand">
             <span className="brand-mark"><BookOpenText size={20} aria-hidden="true" /></span>
-            <div><p>{t('screens.brand')}</p><p className="tagline" lang="en-IN">{t('screens.tagline')}</p></div>
+            <div><p className="brand-name">{t('screens.brand')}</p><p className="tagline" lang="en-IN">{t('screens.tagline')}</p></div>
           </div>
         ) : <h1>{title}</h1>}
         <LanguageSelect compact label={t('common.language')} locales={interfaceLocales} value={language}
@@ -62,15 +62,21 @@ export default function App() {
           }} />
       </header>
       <main className="page-content" id="main-content" ref={main} tabIndex={-1}>
-        <Page language={language} />
+        <div key={page.id} className="page-enter"><Page language={language} /></div>
       </main>
       <nav aria-label={t('app.navigation')} className="bottom-nav">
-        {pages.map(({ id, Icon }) => (
-          <a key={id} href={'#' + id} aria-current={page.id === id ? 'page' : undefined}>
-            <span className="nav-icon"><Icon size={19} strokeWidth={1.85} aria-hidden="true" /></span>
-            <span>{t(`screens.${id}`)}</span>
-          </a>
-        ))}
+        <div className="brand nav-brand">
+          <span className="brand-mark"><BookOpenText size={20} aria-hidden="true" /></span>
+          <div><p className="brand-name">{t('screens.brand')}</p><p className="tagline" lang="en-IN">{t('screens.tagline')}</p></div>
+        </div>
+        <div className="nav-links">
+          {pages.map(({ id, Icon }) => (
+            <a key={id} href={'#' + id} aria-current={page.id === id ? 'page' : undefined}>
+              <span className="nav-icon"><Icon size={20} strokeWidth={page.id === id ? 2.25 : 1.85} aria-hidden="true" /></span>
+              <span>{t(`screens.${id}`)}</span>
+            </a>
+          ))}
+        </div>
       </nav>
     </div>
   )
