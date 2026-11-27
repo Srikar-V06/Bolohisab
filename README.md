@@ -10,6 +10,16 @@ Recording uses your browser’s speech recognition service, which may send audio
 
 To add a language, add the frontend locale catalog and register it in the localization module. Verify script rendering and add a font if needed. Add the locale to the speech choices when you have verified browser support. Update the backend language schema once requests support the new locale. Confirmation and receipt templates interpolate the supplied names, amounts, dates, and IDs as text.
 
+### Local AI for free-form speech (optional)
+
+The built-in rules handle entries in any word order, such as "Ramesh 450 credit" or "रमेश को 450 उधार दिया". For looser speech ("Sunita didi ka 300 wala maal khate mein chadha do"), the backend can ask a small model running on your own machine through [Ollama](https://ollama.com). Nothing leaves the laptop.
+
+```
+ollama pull qwen2.5:3b
+```
+
+The backend uses `qwen2.5:3b` whenever Ollama is running. The model is consulted only when the rules can't read a sentence, which takes about 3 seconds on a laptop CPU. It only points at words you said. The app converts the amount itself, matches the name against your customers, and asks again if the model names an amount, customer or choice you didn't say. You still review every entry before it's saved. Set `BOLO_LOCAL_MODEL` to another Ollama model to switch models, or set it to an empty value to turn this off. Set `OLLAMA_URL` if Ollama isn't on `http://127.0.0.1:11434`.
+
 ### Parse a voice command
 
 Send the exact speech transcript to `POST /api/voice/parse` as `original_transcript`. The request accepts the optional `interface_language` and `speech_language` locale preferences.

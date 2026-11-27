@@ -33,11 +33,16 @@ class FakeRecognition {
   onstart?: () => void
   onend?: () => void
   onresult?: (event: unknown) => void
+  stopped = false
   start() { FakeRecognition.current = this }
-  stop() {}
+  stop() { this.stopped = true }
   abort() {}
   partial(text: string) {
     this.onresult?.({ resultIndex: 0, results: [{ 0: { transcript: text }, isFinal: false }] })
+  }
+  /** A pause after a finalized phrase, as Chrome reports it in continuous mode. */
+  pause(...phrases: string[]) {
+    this.onresult?.({ resultIndex: 0, results: phrases.map(text => ({ 0: { transcript: text }, isFinal: true })) })
   }
   deliver(text: string) {
     this.onresult?.({ resultIndex: 0, results: [{ 0: { transcript: text }, isFinal: true }] })
@@ -212,7 +217,7 @@ it('handles recording and preview, cancels without writing, and posts only after
   expect(within(sheet).getByText('₹1,250')).toBeTruthy()
   expect(sheet.querySelector('blockquote')?.textContent).toBe(transcript)
   fireEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }))
-  expect(send.mock.calls.map(([path]) => path).filter((path) => path !== '/api/customers')).toEqual(['/api/voice/parse'])
+  expect(send.mock.calls.map(([path]) => path).filter((path) => path !== '/api/customers' && path !== '/api/receipts')).toEqual(['/api/voice/parse'])
   await record()
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
   await screen.findByRole('heading', { name: 'Transaction saved' })
@@ -241,6 +246,35 @@ it('shows microphone fallback and localizes a clarification in the app language'
   act(() => FakeRecognition.current.deliver(transcript))
   await screen.findByText('How much should I record?')
   expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
+})
+
+it('keeps listening through pauses and submits the whole sentence after sustained silence', async () => {
+  await i18n.changeLanguage('en-IN')
+  vi.stubGlobal('SpeechRecognition', FakeRecognition)
+  send.mockImplementation((path) => json(path === '/api/voice/parse' ? preview : []))
+  render(<App />)
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }))
+    act(() => FakeRecognition.current.onstart?.())
+    // Silence before the first word never ends the capture on our side.
+    act(() => vi.advanceTimersByTime(10_000))
+    expect(FakeRecognition.current.stopped).toBe(false)
+    act(() => FakeRecognition.current.pause('Ramesh'))
+    act(() => vi.advanceTimersByTime(2_000))
+    act(() => FakeRecognition.current.pause('Ramesh', ' 450 credit'))
+    act(() => vi.advanceTimersByTime(2_000))
+    expect(FakeRecognition.current.stopped).toBe(false)
+    expect(screen.getByText('Ramesh 450 credit')).toBeTruthy()
+    act(() => vi.advanceTimersByTime(600))
+    expect(FakeRecognition.current.stopped).toBe(true)
+  } finally {
+    vi.useRealTimers()
+  }
+  act(() => FakeRecognition.current.onend?.())
+  await screen.findByText('Awaiting confirmation')
+  const parse = send.mock.calls.find(([path]) => path === '/api/voice/parse')
+  expect(JSON.parse(parse?.[1].body).original_transcript).toBe('Ramesh 450 credit')
 })
 
 it('shows confirmed receipt rows, previews the balance, and separates generation from sharing', async () => {

@@ -13,7 +13,8 @@ export function recognitionConstructor() {
 export function configureRecognition(Recognition: typeof SpeechRecognition, locale: Locale) {
   const recognition = new Recognition()
   recognition.lang = locale
-  recognition.continuous = false
+  // Keep listening through pauses; useRecognition ends the capture after sustained silence.
+  recognition.continuous = true
   recognition.interimResults = true
   return recognition
 }
