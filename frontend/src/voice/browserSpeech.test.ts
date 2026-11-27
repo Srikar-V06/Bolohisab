@@ -14,7 +14,7 @@ it('recognizes standard and prefixed browser support and passes through both exa
   expect(constructor).toBe(WebkitRecognition)
   for (const locale of ['hi-IN', 'en-IN'] as const) {
     expect(configureRecognition(constructor, locale)).toMatchObject({
-      lang: locale, continuous: false, interimResults: false,
+      lang: locale, continuous: false, interimResults: true,
     })
   }
 

@@ -14,7 +14,7 @@ export function configureRecognition(Recognition: typeof SpeechRecognition, loca
   const recognition = new Recognition()
   recognition.lang = locale
   recognition.continuous = false
-  recognition.interimResults = false
+  recognition.interimResults = true
   return recognition
 }
 

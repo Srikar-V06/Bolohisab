@@ -52,6 +52,7 @@
     "saveFailed": "Couldn’t verify the save. Use Confirm to retry the same transaction.",
     "stale": "The customer or balance changed. Review the updated details before confirming.",
     "reviewAgain": "Review again",
+    "lastEntry": "Last entry: {{name}}, {{time}}",
     "speechPrivacy": "Your browser may use its speech service to transcribe your audio."
   },
   "clarify": {
