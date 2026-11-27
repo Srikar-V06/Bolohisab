@@ -175,6 +175,14 @@ _FILLER = {
     "account", "ji", "जी", "kar", "karo", "कर", "करो",
     "open", "create", "make", "new", "write", "note", "put", "enter", "mark", "an", "amount",
 }
+# Money the customer still has to hand over is a credit (their dues), never a payment:
+# "Ramesh owes me 500", "Ramesh needs to give me 500", "Ramesh se 500 lene hain".
+# "I need to give Ramesh 500" or "Ramesh ko 500 dene hain" (the shop owes them) are not matched.
+_OWES = re.compile(
+    r"\b(?:owes?|owing)\b(?: (?:me|us))?"
+    r"|\b(?:needs?|has|have|should|must) (?:to )?(?:give|pay|return) (?:me|us)\b"
+    r"|\b(?:lena|lene|lenge) (?:hai|hain|he)\b|लेना है|लेने हैं|बाकी देने हैं",
+    re.IGNORECASE)
 _NEGATION = {"not", "don't", "dont", "no", "cancel", "mat", "nahi", "nahin", "मत", "नहीं", "ना"}
 _WRITE_PHRASE = re.compile(rf"\b{_WRITE}|\b(?:de|दे) (?:do|diya|दो|दिया)\b", re.IGNORECASE)
 
@@ -195,7 +203,7 @@ def _amount_window(words: list[str]) -> tuple[int, int, int] | None:
 
 def _fill_slots(clause: str, customers: Sequence[CustomerIdentity]) -> UnresolvedAction | None:
     """Read intent, amount, method and a known customer from a clause in any word order."""
-    text = _WRITE_PHRASE.sub(" ", clause)
+    text = _OWES.sub(" credit ", _WRITE_PHRASE.sub(" ", clause))
     words = [word.strip(",.?!:") for word in text.split()]
     words = [word for word in words if word]
     folded = [word.casefold() for word in words]

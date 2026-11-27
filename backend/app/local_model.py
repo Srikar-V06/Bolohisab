@@ -18,6 +18,15 @@ from .parser import _CASH, _PRONOUNS, _UPI, Intent, PaymentMethod, UnresolvedAct
 
 log = logging.getLogger(__name__)
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+# Direction guards. A small model confuses who pays whom, so these sentences always ask again:
+# a "payment" that has not happened yet, and a "credit" where the shopkeeper is the one who owes.
+_NOT_YET = re.compile(
+    r"\b(?:will|shall|need|needs|has to|have to|should|must|going to|next|tomorrow|later|promised"
+    r"|dega|degi|denge|dene wala|dene wali|karega|karegi)\b|देगा|देगी|देंगे", re.IGNORECASE)
+_SHOP_OWES = re.compile(
+    r"\b(?:i|we) (?:owe|need to (?:give|pay|return)|have to (?:give|pay|return)|must (?:give|pay)"
+    r"|should (?:give|pay)|will (?:give|pay))\b|\bmujhe\b.*\b(?:dena|dene|lautana)\b|मुझे.*(?:देना|देने|लौटाना)"
+    r"|\bmain(?:ne)?\b.*\b(?:dunga|dungi|dena hai)\b", re.IGNORECASE)
 
 _SCHEMA = {
     "type": "object",
@@ -37,8 +46,12 @@ _SCHEMA = {
 _INSTRUCTIONS = (
     "You read one sentence a shopkeeper spoke to their ledger app, in English, Hindi or Hinglish, "
     "and return its actions as JSON.\n"
-    "intent: CREDIT when the customer took goods or money on credit (udhaar), so their dues go up; "
-    "PAYMENT when the customer paid or returned money, so their dues go down; "
+    "intent: CREDIT when the customer took goods or money on credit (udhaar) or still has to pay the "
+    "shopkeeper, so their dues go up. Examples of CREDIT: 'Ramesh owes me 500', 'Ramesh needs to give me "
+    "500', 'Ramesh has to pay 500', 'Ramesh se 500 lene hain', 'Ramesh ko 500 ka saamaan diya'. "
+    "PAYMENT only when the customer has already handed money over, so their dues go down. Examples of "
+    "PAYMENT: 'Ramesh paid 500', 'Ramesh gave me 500', 'Ramesh ne 500 diye', 'Ramesh ne 500 lautaye'. "
+    "Words like need to, has to, should, will or owes mean the money has NOT been paid yet. "
     "BALANCE_QUERY when asking how much a customer owes.\n"
     "customer_words: the customer's name copied exactly as written in the sentence, without words like "
     "ko, ne, ka, bhaiya or ji. Use null if no name is said.\n"
@@ -93,6 +106,9 @@ class LocalModelAdapter:
             try:
                 intent = Intent(proposal["intent"])
             except (KeyError, TypeError, ValueError):
+                return None
+            if (intent == Intent.PAYMENT and _NOT_YET.search(said)) or (
+                    intent == Intent.CREDIT and _SHOP_OWES.search(said)):
                 return None
             name = (proposal.get("customer_words") or "").strip() or None
             amount_text = (proposal.get("amount_words") or "").strip()

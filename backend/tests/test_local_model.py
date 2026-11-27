@@ -49,6 +49,16 @@ class LocalModelTest(unittest.TestCase):
             parse_transcript("Ramesh bhaiya ne kal wale 500 mein se 200 de diye", PEOPLE,
                              fallback=StubModel(act("PAYMENT", "Ramesh bhaiya", "500")))
 
+    def test_unsure_direction_asks_again(self) -> None:
+        for text, proposal in (
+            ("Sunita will pay 300 next week", act("PAYMENT", "Sunita", "300")),
+            ("Ramesh Kumar need to send 500 to me", act("PAYMENT", "Ramesh Kumar", "500")),
+            ("I need to give Ramesh 200", act("CREDIT", "Ramesh", "200")),
+            ("mujhe Ramesh ko 200 dene hain", act("CREDIT", "Ramesh", "200")),
+        ):
+            with self.subTest(text=text), self.assertRaises(ClarificationRequired):
+                parse_transcript(text, PEOPLE, fallback=StubModel(proposal))
+
     def test_model_reads_free_speech_and_the_app_parses_the_amount(self) -> None:
         text = "Ramesh bhaiya ne aaj 200 de diye cash mein"
         action, = parse_transcript(text, PEOPLE, fallback=StubModel(act("PAYMENT", "Ramesh bhaiya", "200", "cash")))
