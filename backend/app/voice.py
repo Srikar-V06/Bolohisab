@@ -108,7 +108,8 @@ def parse_voice(payload: VoiceParseRequest, request: Request) -> VoiceParseResul
     message_language = language or TranscriptLanguage(payload.interface_language)
     try:
         with ledger_session(request.app.state.database_path) as ledger:
-            actions = parse_transcript(transcript, ledger.list_customer_names(DEFAULT_SHOP_ID))
+            actions = parse_transcript(transcript, ledger.list_customer_names(DEFAULT_SHOP_ID),
+                                       fallback=request.app.state.local_model)
             balances = _balance_previews(ledger, actions)
     except ClarificationRequired as error:
         return VoiceParseResult(
@@ -156,7 +157,10 @@ def confirm_voice(payload: VoiceConfirmRequest, request: Request) -> Transaction
             return committed
 
         try:
-            parsed = parse_transcript(transcript, ledger.list_customer_names(DEFAULT_SHOP_ID))
+            # ponytail: on a cache miss (server restarted since review) the model runs inside this write
+            # transaction for a few seconds; precompute outside the session if concurrent writers appear.
+            parsed = parse_transcript(transcript, ledger.list_customer_names(DEFAULT_SHOP_ID),
+                                      fallback=request.app.state.local_model)
         except ClarificationRequired as error:
             raise HTTPException(409, "STALE_REVIEW") from error
         if _ledger_drafts(parsed) != reviewed:

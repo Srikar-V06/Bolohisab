@@ -119,8 +119,15 @@ _NAME_EQUIVALENTS = {
 }
 
 
+# Spoken forms of address that are not part of a stored name ("Ramesh bhaiya", "Sunita ji").
+_HONORIFICS = {
+    "bhai", "bhaiya", "bhaiyya", "ji", "sahab", "saheb", "didi", "behen", "aunty", "uncle", "sir", "madam",
+    "भाई", "भैया", "जी", "साहब", "दीदी", "बहन",
+}
+
+
 def _name_key(name: str) -> tuple[str, ...]:
-    words = normalize("NFC", name).casefold().split()
+    words = [word for word in normalize("NFC", name).casefold().split() if word not in _HONORIFICS]
     return tuple(_NAME_EQUIVALENTS.get(word, word) for word in words)
 
 
@@ -213,7 +220,7 @@ def _fill_slots(clause: str, customers: Sequence[CustomerIdentity]) -> Unresolve
     for start in range(len(words)):
         for end in range(len(words), start, -1):
             span = _name_key(" ".join(words[start:end]))
-            if any(key[: len(span)] == span for key in keys) and (
+            if span and any(key[: len(span)] == span for key in keys) and (
                     name_span is None or end - start > name_span[1] - name_span[0]):
                 name_span = (start, end)
                 break
@@ -273,6 +280,8 @@ def _resolve_customer(
         raise ClarificationRequired(ClarificationCode.AMBIGUOUS_CUSTOMER, index, list(previous.values()))
 
     key = _name_key(name)
+    if not key:
+        raise ClarificationRequired(ClarificationCode.MISSING_CUSTOMER, index)
     matches = [customer for customer in customers if _name_key(customer.name)[: len(key)] == key]
     if not matches:
         raise ClarificationRequired(ClarificationCode.CUSTOMER_NOT_FOUND, index)
@@ -284,10 +293,28 @@ def _resolve_customer(
 def parse_transcript(
     transcript: str, customers: Sequence[CustomerIdentity], *,
     adapter: VoiceUnderstandingAdapter | None = None,
+    fallback: VoiceUnderstandingAdapter | None = None,
 ) -> list[ParsedAction]:
-    """Interpret the whole transcript and resolve each name within the shop's directory."""
+    """Interpret the whole transcript and resolve each name within the shop's directory.
+
+    `adapter` replaces the rules. `fallback` is consulted only when the rules need clarification
+    (other than a genuinely ambiguous name), and its proposals pass the same validation.
+    """
     proposed = adapter.interpret(transcript) if adapter is not None else None
-    drafts = tuple(proposed) if proposed is not None else _recognize(transcript, customers)
+    if proposed is not None:
+        return _validate(tuple(proposed), customers)
+    try:
+        return _validate(_recognize(transcript, customers), customers)
+    except ClarificationRequired as error:
+        if fallback is None or error.code == ClarificationCode.AMBIGUOUS_CUSTOMER:
+            raise
+        suggested = fallback.interpret(transcript)
+        if not suggested:
+            raise
+        return _validate(tuple(suggested), customers)
+
+
+def _validate(drafts: tuple[UnresolvedAction, ...], customers: Sequence[CustomerIdentity]) -> list[ParsedAction]:
     if not drafts:
         raise ClarificationRequired(ClarificationCode.MISSING_INTENT, 1)
 

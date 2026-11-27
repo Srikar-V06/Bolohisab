@@ -198,6 +198,8 @@ class VoiceApiTest(unittest.TestCase):
             ("Ramesh ko do sau udhaar de do", self.ramesh, 20000, credit),
             ("Ramesh 450 rupees credit", self.ramesh, 45000, credit),
             ("open a Credit entry for Ramesh for Rs 100", self.ramesh, 10000, credit),
+            ("Ramesh sahab 450 credit", self.ramesh, 45000, credit),
+            ("Suresh bhaiya ne 200 diye", self.suresh, 20000, payment),
             ("200 received from Ramesh", self.ramesh, 20000, payment),
             ("Ramesh 200 payment", self.ramesh, 20000, payment),
             ("got 200 from Suresh in cash", self.suresh, 20000, ("PAYMENT", "CASH")),
@@ -215,7 +217,7 @@ class VoiceApiTest(unittest.TestCase):
             ("Mahesh 450 credit", "CUSTOMER_NOT_FOUND"),
             ("450 credit", "MISSING_CUSTOMER"),
             ("Ramesh 450 credit 200", "MISSING_INTENT"),
-            ("Ramesh sahab 450 credit", "MISSING_INTENT"),
+            ("Ramesh yaar 450 credit", "MISSING_INTENT"),
             ("Ramesh 450", "MISSING_INTENT"),
             ("Ramesh ko 450 udhaar mat do", "MISSING_INTENT"),
         ):
