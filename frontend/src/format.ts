@@ -27,3 +27,29 @@ export function initials(name: string, language: Locale) {
   return name.trim().split(/\s+/).slice(0, 2)
     .map((word) => [...segmenter.segment(word)][0]?.segment.toLocaleUpperCase(language) ?? '').join('')
 }
+
+const indiaDay = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+})
+
+/** Group newest first, preserving input order for equal timestamps. */
+export function transactionDays<T extends { created_at: string }>(entries: T[], language: Locale, now = new Date()) {
+  const groups = new Map<string, { key: string; label: string; entries: T[] }>()
+  const today = indiaDay.format(now)
+  const yesterday = indiaDay.format(now.getTime() - 86_400_000)
+  const relative = new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
+  const date = new Intl.DateTimeFormat(language, { timeZone: 'Asia/Kolkata', dateStyle: 'long' })
+  const sorted = entries.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+  for (const entry of sorted) {
+    const instant = new Date(entry.created_at)
+    const key = indiaDay.format(instant)
+    let group = groups.get(key)
+    if (!group) {
+      const label = key === today ? relative.format(0, 'day') : key === yesterday ? relative.format(-1, 'day') : date.format(instant)
+      group = { key, label, entries: [] }
+      groups.set(key, group)
+    }
+    group.entries.push(entry)
+  }
+  return Array.from(groups.values())
+}

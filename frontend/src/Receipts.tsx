@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Clock3, Link2, ReceiptText, Volume2 } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, Check, Clock3, Link2, SlidersHorizontal, ReceiptText, Volume2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from './api'
 import type { Receipt } from './api'
 import { LoadError, Loading, Sheet, useLoad } from './components'
-import { money, transactionDate, transactionLabel } from './format'
+import { money, transactionDate, transactionDays, transactionLabel } from './format'
 import LanguageSelect from './localization/LanguageSelect'
 import { interfaceLocales, readLanguage, saveLanguage } from './localization/languages'
 import type { Locale } from './localization/languages'
@@ -18,7 +18,7 @@ function ReceiptPreview({ item, close, update }: { item: Receipt; close: () => v
   const [showLink, setShowLink] = useState(false)
   const [message, setMessage] = useState<
     'receiptList.copied' | 'receiptList.manualCopy' | 'receiptList.shared' | 'receiptList.actionFailed'
-    | 'receiptList.shareFailed' | 'voice.errors.voiceUnavailable' | 'voice.errors.playback'
+    | 'receiptList.ready' | 'receiptList.shareFailed' | 'voice.errors.voiceUnavailable' | 'voice.errors.playback'
   >()
   const utterance = useRef<SpeechSynthesisUtterance | null>(null)
   const label = i18n.getFixedT(language)
@@ -86,7 +86,7 @@ function ReceiptPreview({ item, close, update }: { item: Receipt; close: () => v
     setMessage(undefined)
     try {
       update(await save())
-      if (sent) setMessage('receiptList.shared')
+      setMessage(sent ? 'receiptList.shared' : 'receiptList.ready')
     } catch {
       setMessage('receiptList.actionFailed')
     } finally {
@@ -129,10 +129,20 @@ function ReceiptPreview({ item, close, update }: { item: Receipt; close: () => v
           setLanguage(locale)
           saveLanguage('receipt', locale)
         }} />
-      <dl className="detail-card card" lang={language}>
-        {details.map(([key, value]) => <div className="info-row" key={key}><dt>{key}</dt><dd>{value}</dd></div>)}
-      </dl>
-      <div className="sheet-actions">
+      <article className="receipt-paper" lang={language}>
+        <header>
+          <h3>{item.shop_name}</h3>
+          <p>{label('receiptList.id')} #{item.entry_id}</p>
+          <time dateTime={item.created_at}>{transactionDate(item.created_at, language)}</time>
+        </header>
+        <dl>
+          <div className="info-row"><dt>{label('receiptList.customer')}</dt><dd>{item.customer_name}</dd></div>
+          <div className="info-row"><dt>{label('receiptList.details')}</dt><dd>{transactionLabel(label, item.type, item.payment_method)}</dd></div>
+          <div className="info-row receipt-face-amount"><dt>{label('receiptList.amount')}</dt><dd>{money(item.amount_paise)}</dd></div>
+          <div className="info-row receipt-balance"><dt>{label('receiptList.balance')}</dt><dd>{money(item.balance_after_paise)}</dd></div>
+        </dl>
+      </article>
+      <div className="sheet-actions receipt-actions">
         {!link && <button className="button button-primary" type="button" disabled={pending}
           onClick={() => void changeReceipt(() => api.generate(item.entry_id, language))}>
           <ReceiptText size={17} aria-hidden="true" /> {t(pending ? 'receiptList.generating' : 'receiptList.generate')}
@@ -178,10 +188,15 @@ export default function Receipts({ language }: { language: Locale }) {
       </div>
       {error ? <LoadError error={error} retry={retry} /> : !data ? <Loading text={t('common.loading')} />
         : items.length === 0 ? <p className="notice">{t(tab === 'awaiting' ? 'receiptList.emptyAwaiting' : 'receiptList.emptySent')}</p>
-          : <ul className="stack-list">
-            {items.map((item) => (
+          : transactionDays(items, language).map(day => (
+          <section className="receipt-day" key={day.key}>
+            <h2>{day.label}</h2>
+            <ul>{day.entries.map((item) => {
+              const Icon = item.type === 'CREDIT' ? ArrowUpRight : item.type === 'PAYMENT' ? ArrowDownLeft : SlidersHorizontal
+              return (
               <li key={item.entry_id}>
-                <button className="receipt-row card" type="button" onClick={() => setSelectedId(item.entry_id)}>
+                <button className="receipt-row" type="button" onClick={() => setSelectedId(item.entry_id)}>
+                  <span className="receipt-kind"><Icon size={19} aria-hidden="true" /></span>
                   <span className="list-copy">
                     <strong>{item.customer_name}</strong>
                     <span className="subtle">{transactionLabel(t, item.type, item.payment_method)} ·{' '}
@@ -198,8 +213,9 @@ export default function Receipts({ language }: { language: Locale }) {
                   </span>
                 </button>
               </li>
-            ))}
-          </ul>}
+              )
+            })}</ul>
+          </section>))}
       {selected && <ReceiptPreview item={selected} close={() => setSelectedId(undefined)}
         update={(item) => setData((rows) => rows?.map((row) => row.entry_id === item.entry_id ? item : row))} />}
     </div>
