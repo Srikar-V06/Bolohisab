@@ -166,6 +166,7 @@ _FILLER = {
     "is", "was", "please", "ko", "ne", "se", "ka", "ke", "ki", "mein", "main", "hai", "hain", "tha",
     "को", "ने", "से", "का", "के", "की", "में", "है", "हैं", "था", "khate", "khata", "खाते", "खाता",
     "account", "ji", "जी", "kar", "karo", "कर", "करो",
+    "open", "create", "make", "new", "write", "note", "put", "enter", "mark", "an", "amount",
 }
 _NEGATION = {"not", "don't", "dont", "no", "cancel", "mat", "nahi", "nahin", "मत", "नहीं", "ना"}
 _WRITE_PHRASE = re.compile(rf"\b{_WRITE}|\b(?:de|दे) (?:do|diya|दो|दिया)\b", re.IGNORECASE)

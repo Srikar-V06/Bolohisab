@@ -197,6 +197,7 @@ class VoiceApiTest(unittest.TestCase):
             ("रमेश को 450 उधार दिया", self.ramesh, 45000, credit),
             ("Ramesh ko do sau udhaar de do", self.ramesh, 20000, credit),
             ("Ramesh 450 rupees credit", self.ramesh, 45000, credit),
+            ("open a Credit entry for Ramesh for Rs 100", self.ramesh, 10000, credit),
             ("200 received from Ramesh", self.ramesh, 20000, payment),
             ("Ramesh 200 payment", self.ramesh, 20000, payment),
             ("got 200 from Suresh in cash", self.suresh, 20000, ("PAYMENT", "CASH")),
