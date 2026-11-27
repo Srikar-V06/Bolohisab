@@ -46,7 +46,8 @@ export function transactionDays<T extends { created_at: string }>(entries: T[], 
     let group = groups.get(key)
     if (!group) {
       const label = key === today ? relative.format(0, 'day') : key === yesterday ? relative.format(-1, 'day') : date.format(instant)
-      group = { key, label, entries: [] }
+      const heading = language === 'en-IN' ? label.charAt(0).toUpperCase() + label.slice(1) : label
+      group = { key, label: heading, entries: [] }
       groups.set(key, group)
     }
     group.entries.push(entry)
