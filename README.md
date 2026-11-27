@@ -10,6 +10,22 @@ Recording uses your browser’s speech recognition service, which may send audio
 
 To add a language, add the frontend locale catalog and register it in the localization module. Verify script rendering and add a font if needed. Add the locale to the speech choices when you have verified browser support. Update the backend language schema once requests support the new locale. Confirmation and receipt templates interpolate the supplied names, amounts, dates, and IDs as text.
 
+### Parse a voice command
+
+Send the exact speech transcript to `POST /api/voice/parse` as `original_transcript`. The request accepts the optional `interface_language` and `speech_language` locale preferences.
+
+```json
+{
+  "original_transcript": "Ramesh ke khate mein saadhe chaar sau likh do aur usne do sau cash diya hai."
+}
+```
+
+With Ramesh in the local shop’s customer list, the response is `REVIEW_REQUIRED` with two ordered actions, a 45,000-paise `CREDIT` and a 20,000-paise `PAYMENT` with method `CASH`. It also returns the original transcript, detected language, English interpretation, and localized review message. An explicit account phrase such as “Ramesh ke khate mein … likh do” is a credit command. The parser recognizes Hindi (`hi-IN`), Hinglish (`hi-Latn-IN`), and Indian English (`en-IN`).
+
+If any action is unclear, the response is `CLARIFICATION_REQUIRED` with an empty action list and a localized question. Customer resolution uses the stored names, unique name prefixes, and a small list of explicit cross-script spelling equivalents. A pronoun can refer back to one unambiguous customer in the same command. If more than one customer matches, the response lists the candidate IDs and stored names.
+
+The API reads the shop’s customer names and returns a draft. A caller must obtain explicit shopkeeper confirmation before passing structured credit or payment actions to the ledger. The English interpretation and localized message are display text. The deterministic parser works without API keys. Future adapters can implement `VoiceUnderstandingAdapter` to propose draft actions that still pass the local validation and customer lookup.
+
 ## Run with Docker Compose
 
 Install Docker with the Compose plugin and start the Docker engine. From the repository root, run:

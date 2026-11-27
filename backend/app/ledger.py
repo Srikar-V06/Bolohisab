@@ -41,6 +41,12 @@ class Customer:
 
 
 @dataclass(frozen=True)
+class CustomerIdentity:
+    id: int
+    name: str
+
+
+@dataclass(frozen=True)
 class LedgerEntryDraft:
     customer_id: int
     type: EntryType
@@ -114,6 +120,14 @@ class Ledger:
     def list_customers(self, shop_id: int) -> list[Customer]:
         validate_id(shop_id, "shop_id")
         return list(self._read_customers(shop_id))
+
+    def list_customer_names(self, shop_id: int) -> list[CustomerIdentity]:
+        validate_id(shop_id, "shop_id")
+        rows = self.connection.execute(
+            "SELECT id, name FROM customers WHERE shop_id = ? ORDER BY id",
+            (shop_id,),
+        )
+        return [CustomerIdentity(**dict(row)) for row in rows]
 
     def get_customer(self, shop_id: int, customer_id: int) -> Customer:
         validate_id(shop_id, "shop_id")
