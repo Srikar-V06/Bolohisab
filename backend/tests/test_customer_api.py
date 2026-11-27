@@ -32,6 +32,8 @@ class CustomerApiTest(unittest.TestCase):
             ], original_transcript="सीता ने ₹200 दिए।", detected_language="hi-IN")
 
         customer["balance_paise"] = 25_000
+        history = self.client.get(f"/api/customers/{customer_id}/ledger").json()
+        customer["last_transaction_at"] = history[-1]["created_at"]
         self.assertEqual(self.client.get("/api/customers").json(), [customer])
         self.assertEqual(self.client.get(f"/api/customers/{customer_id}").json(), customer)
         response = self.client.get(f"/api/customers/{customer_id}/ledger")

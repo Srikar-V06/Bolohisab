@@ -13,6 +13,7 @@ export const englishLocale: Locale = 'en-IN'
 const preferences = {
   interface: { key: 'bolohisaab.interface-language', locales: interfaceLocales },
   speech: { key: 'bolohisaab.speech-language', locales: speechLocales },
+  receipt: { key: 'bolohisaab.receipt-language', locales: interfaceLocales },
 } as const
 
 type Preference = keyof typeof preferences

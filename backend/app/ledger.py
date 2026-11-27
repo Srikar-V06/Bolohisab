@@ -2,7 +2,7 @@ import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from itertools import groupby
+from itertools import chain, groupby
 from pathlib import Path
 from typing import Literal
 
@@ -10,6 +10,7 @@ from .database import database_transaction
 
 MAX_SQLITE_INTEGER = 2**63 - 1
 EntryType = Literal["CREDIT", "PAYMENT", "ADJUSTMENT"]
+PaymentMethodCode = Literal["CASH", "UPI"]
 
 
 class CustomerNotFound(LookupError):
@@ -38,6 +39,7 @@ class Customer:
     name: str
     created_at: str
     balance_paise: int
+    last_transaction_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class LedgerEntryDraft:
     type: EntryType
     amount_paise: int
     corrects_entry_id: int | None = None
+    payment_method: PaymentMethodCode | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.customer_id, "customer_id")
@@ -65,6 +68,14 @@ class LedgerEntryDraft:
             validate_id(self.corrects_entry_id, "corrects_entry_id")
             if self.type != "ADJUSTMENT":
                 raise ValueError("Only an adjustment can correct an existing ledger entry")
+        if self.payment_method is not None and (
+            self.type != "PAYMENT" or self.payment_method not in ("CASH", "UPI")
+        ):
+            raise ValueError("Cash and UPI methods apply to payments only")
+
+    @property
+    def balance_effect_paise(self) -> int:
+        return -self.amount_paise if self.type == "PAYMENT" else self.amount_paise
 
 
 @dataclass(frozen=True)
@@ -80,6 +91,12 @@ class LedgerEntry:
     created_at: str
     original_transcript: str | None
     detected_language: str | None
+    payment_method: PaymentMethodCode | None
+
+    def as_draft(self) -> LedgerEntryDraft:
+        return LedgerEntryDraft(
+            self.customer_id, self.type, self.amount_paise, self.corrects_entry_id, self.payment_method,
+        )
 
 
 @dataclass(frozen=True)
@@ -200,10 +217,7 @@ class Ledger:
         self._require_shop(shop_id)
         existing = self.get_batch(shop_id, batch_id)
         if existing is not None:
-            recorded_drafts = tuple(
-                LedgerEntryDraft(entry.customer_id, entry.type, entry.amount_paise, entry.corrects_entry_id)
-                for entry in existing.entries
-            )
+            recorded_drafts = tuple(entry.as_draft() for entry in existing.entries)
             if (original_transcript, detected_language, drafts) != (
                 existing.original_transcript, existing.detected_language, recorded_drafts,
             ):
@@ -243,10 +257,12 @@ class Ledger:
                 raise ValueError("Correction must reference an existing entry for the same customer")
         self.connection.execute(
             """
-            INSERT INTO ledger_entries (shop_id, batch_id, customer_id, type, amount_paise, corrects_entry_id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO ledger_entries (
+                shop_id, batch_id, customer_id, type, amount_paise, corrects_entry_id, payment_method
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (shop_id, batch_id, entry.customer_id, entry.type, entry.amount_paise, entry.corrects_entry_id),
+            (shop_id, batch_id, entry.customer_id, entry.type, entry.amount_paise,
+             entry.corrects_entry_id, entry.payment_method),
         )
 
     def _require_shop(self, shop_id: int) -> None:
@@ -279,17 +295,22 @@ class Ledger:
     def _read_customers(self, shop_id: int, customer_id: int | None = None) -> Iterator[Customer]:
         rows = self.connection.execute(
             """
-            SELECT customer.id, customer.shop_id, customer.name, customer.created_at, entry.balance_effect_paise
+            SELECT customer.id, customer.shop_id, customer.name, customer.created_at,
+                   entry.balance_effect_paise, entry.created_at AS last_transaction_at
             FROM customers AS customer
             LEFT JOIN ledger_entries AS entry ON entry.shop_id = customer.shop_id AND entry.customer_id = customer.id
             WHERE customer.shop_id = ? AND (? IS NULL OR customer.id = ?)
-            ORDER BY customer.id
+            ORDER BY customer.id, entry.id
             """,
             (shop_id, customer_id, customer_id),
         )
         for _, group in groupby(rows, key=lambda row: row["id"]):
-            customer = dict(next(group))
+            first = next(group)
+            customer = dict(first)
+            del customer["balance_effect_paise"]
             # Python integers keep the sum exact even beyond SQLite's 64-bit SUM range.
-            first_effect = customer.pop("balance_effect_paise") or 0
-            balance = first_effect + sum(entry["balance_effect_paise"] for entry in group)
+            balance = 0
+            for entry in chain((first,), group):
+                balance += entry["balance_effect_paise"] or 0
+                customer["last_transaction_at"] = entry["last_transaction_at"]
             yield Customer(**customer, balance_paise=balance)

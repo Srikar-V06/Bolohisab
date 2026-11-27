@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 
 from .customers import router as customer_router
 from .database import check_database, database_path as configured_database_path, initialize_database
+from .receipts import router as receipt_router
 from .voice import router as voice_router
 
 
@@ -22,6 +23,7 @@ def create_app(database_path: Path | None = None) -> FastAPI:
     app.state.database_path = path
     app.include_router(customer_router)
     app.include_router(voice_router)
+    app.include_router(receipt_router)
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict[str, Literal["ok", "connected"]]:

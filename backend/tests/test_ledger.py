@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Barrier
 
-from app.database import DEFAULT_SHOP_ID, connect_database, database_transaction, initialize_database
+from app.database import DEFAULT_SHOP_ID, SCHEMA_VERSION, connect_database, database_transaction, initialize_database
 from app.ledger import (
     MAX_SQLITE_INTEGER,
     BatchConflict,
@@ -218,4 +218,4 @@ class MigrationAndSeedTest(unittest.TestCase):
             with closing(connect_database(path)) as connection:
                 self.assertEqual(connection.execute("SELECT name FROM earlier_data").fetchone()[0], "preserved")
                 self.assertEqual(connection.execute("SELECT count(*) FROM shops").fetchone()[0], 1)
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)

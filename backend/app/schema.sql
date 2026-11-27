@@ -1,5 +1,3 @@
-BEGIN IMMEDIATE;
-
 CREATE TABLE IF NOT EXISTS shops (
     id INTEGER PRIMARY KEY CHECK (id > 0),
     name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 120),
@@ -113,6 +111,3 @@ BEGIN
 END;
 
 INSERT INTO shops (id, name) VALUES (1, 'Kirana Shop') ON CONFLICT(id) DO NOTHING;
-
-PRAGMA user_version = 1;
-COMMIT;

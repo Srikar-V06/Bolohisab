@@ -1,12 +1,12 @@
 # BoloHisaab
 
-BoloHisaab is a voice-first digital khata for Indian kirana shops. It includes a responsive dashboard, sample customer balances, a dispute list, a weekly report, and a Voice Entry page with browser recording and a sample payment. FastAPI initializes SQLite and exposes a health endpoint. No external API keys are required.
+BoloHisaab is a voice-first digital khata for Indian kirana shops. Its three screens are Speak, Customers, and Receipts. The app uses the existing FastAPI parser and SQLite ledger. No external API keys are required.
 
 ## Languages and voice
 
-The app starts in Hindi (hi-IN). Use the header to switch to Indian English (en-IN). Voice Entry has its own speech language selector. The browser stores both preferences independently.
+The app starts in Hindi (hi-IN). Use the header to switch to Indian English (en-IN). Speak has its own speech language selector, and receipt previews have their own receipt language selector. The browser stores all three preferences independently.
 
-Recording uses your browser’s speech recognition service, which may send audio to the browser provider. The transcript is displayed as returned by the browser. English translations are available for the supplied Hindi sample and supported Hindi payment and credit phrases with numeric amounts. Other recordings can still be read in their original form. Confirmation playback uses the browser’s available voices and keeps the confirmation visible when a suitable voice is unavailable.
+Recording uses your browser’s speech recognition service, which may send audio to the browser provider. Open the app in a browser with Web Speech recognition on localhost or HTTPS. The app shows the original transcript and the parser’s English interpretation when available. Confirm posts the reviewed entries to the ledger. Cancel closes the review. Receipt playback uses the browser’s available voices and keeps the written receipt visible when a suitable voice is unavailable.
 
 To add a language, add the frontend locale catalog and register it in the localization module. Verify script rendering and add a font if needed. Add the locale to the speech choices when you have verified browser support. Update the backend language schema once requests support the new locale. Confirmation and receipt templates interpolate the supplied names, amounts, dates, and IDs as text.
 
@@ -24,7 +24,7 @@ With Ramesh in the local shop’s customer list, the response is `REVIEW_REQUIRE
 
 If any action is unclear, the response is `CLARIFICATION_REQUIRED` with an empty action list and a localized question. Customer resolution uses the stored names, unique name prefixes, and a small list of explicit cross-script spelling equivalents. A pronoun can refer back to one unambiguous customer in the same command. If more than one customer matches, the response lists the candidate IDs and stored names.
 
-The API reads the shop’s customer names and returns a draft. A caller must obtain explicit shopkeeper confirmation before passing structured credit or payment actions to the ledger. The English interpretation and localized message are display text. The deterministic parser works without API keys. Future adapters can implement `VoiceUnderstandingAdapter` to propose draft actions that still pass the local validation and customer lookup.
+The API reads the shop’s customer names and returns a draft with previous and updated balances. When the shopkeeper selects Confirm, the app sends the reviewed actions, previous balances, original transcript, and a retry-safe batch ID to `POST /api/voice/confirm`. The endpoint rechecks the interpretation and balances before posting the batch. The English interpretation and localized message are display text. The deterministic parser works without API keys. Future adapters can implement `VoiceUnderstandingAdapter` to propose draft actions that still pass the local validation and customer lookup.
 
 ## Run with Docker Compose
 
@@ -34,7 +34,7 @@ Install Docker with the Compose plugin and start the Docker engine. From the rep
 docker compose up --build
 ```
 
-Open the [dashboard](http://localhost:3000) or check the [API health endpoint](http://localhost:3000/api/health). The frontend proxies API requests to FastAPI on the internal Compose network. Set `BOLOHISAAB_PORT` before startup to change the host port if 3000 is in use.
+Open [BoloHisaab](http://localhost:3000) or check the [API health endpoint](http://localhost:3000/api/health). The frontend proxies API requests to FastAPI on the internal Compose network. Set `BOLOHISAAB_PORT` before startup to change the host port if 3000 is in use.
 
 A healthy response is HTTP 200 with:
 
@@ -61,6 +61,12 @@ docker compose exec backend python -m app.seed_demo
 ```
 
 For local development, run `python -m app.seed_demo` from `backend/`. The script adds Ramesh, Suresh, and Sita with sample purchases and cash payments to the local kirana shop. It can be run repeatedly without duplicating the demo. Ramesh’s balance is 125,000 paise (₹1,250) after a ₹1,000 opening credit, a ₹450 purchase, and a ₹200 payment.
+
+For the Stitch reference data, run `docker compose exec backend python -m app.seed_demo --stitch-preview` against a demo database. The seed creates the four reference customers, ₹4,500 in total outstanding balances, and three receipts ready to prepare.
+
+### Receipts
+
+The Receipts screen lists saved ledger entries. Awaiting includes entries that need a receipt and generated receipts ready to share. Sent shows receipts marked sent after native sharing or after the shopkeeper sends a copied link and selects Mark as sent. A recipient link displays a single receipt in the chosen language. The link must use a deployment the recipient can reach.
 
 ## Run locally without Docker
 
