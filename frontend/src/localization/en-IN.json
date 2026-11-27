@@ -227,5 +227,26 @@
       "credit": "Credit of {{amount}} added for {{customerName}}."
     },
     "receipt": "BoloHisaab receipt\nTransaction: {{transactionId}}\nDate: {{date}}\nCustomer: {{customerName}}\nType: {{type}}\nAmount: {{amount}}"
+  },
+  "home": {
+    "owedToYou": "To collect",
+    "ageing": "Dues by last entry",
+    "age0": "0–7 days",
+    "age1": "8–30 days",
+    "age2": "30+ days",
+    "topDues": "Highest dues",
+    "seeAll": "See all",
+    "today": "Today",
+    "askToday": "Ask for payment today",
+    "daysSince_one": "{{count}} day since last entry",
+    "daysSince_other": "{{count}} days since last entry",
+    "remind": "Remind",
+    "remindLabel": "Remind {{name}} on WhatsApp",
+    "remindText": "Namaste {{name}} ji, your khata balance is {{amount}}. Please pay when convenient.",
+    "listenLabel": "Hear {{name}}'s balance",
+    "listenText": "{{name}}, balance {{amount}}",
+    "lastToday": "Last entry today",
+    "creditToday": "Credit today",
+    "paidToday": "Paid today"
   }
 }

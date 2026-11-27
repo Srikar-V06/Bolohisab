@@ -227,5 +227,26 @@
       "credit": "{{customerName}} को {{amount}} का उधार।"
     },
     "receipt": "बोलोहिसाब की रसीद\nलेन-देन: {{transactionId}}\nतारीख़: {{date}}\nग्राहक: {{customerName}}\nप्रकार: {{type}}\nरकम: {{amount}}"
+  },
+  "home": {
+    "owedToYou": "आपको मिलना है",
+    "ageing": "आख़िरी एंट्री से बकाया",
+    "age0": "0–7 दिन",
+    "age1": "8–30 दिन",
+    "age2": "30+ दिन",
+    "topDues": "सबसे ज़्यादा बकाया",
+    "seeAll": "सभी देखें",
+    "today": "आज",
+    "askToday": "आज किससे माँगें",
+    "daysSince_one": "आख़िरी एंट्री {{count}} दिन पहले",
+    "daysSince_other": "आख़िरी एंट्री {{count}} दिन पहले",
+    "remind": "याद दिलाएँ",
+    "remindLabel": "{{name}} को WhatsApp पर याद दिलाएँ",
+    "remindText": "नमस्ते {{name}} जी, आपके खाते में {{amount}} बाकी है। सुविधा अनुसार चुका दीजिए।",
+    "listenLabel": "{{name}} का बकाया सुनें",
+    "listenText": "{{name}}, बकाया {{amount}}",
+    "lastToday": "आख़िरी एंट्री आज",
+    "creditToday": "आज उधार",
+    "paidToday": "आज जमा"
   }
 }
