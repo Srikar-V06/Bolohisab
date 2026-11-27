@@ -217,7 +217,7 @@ it('handles recording and preview, cancels without writing, and posts only after
   expect(within(sheet).getByText('₹1,250')).toBeTruthy()
   expect(sheet.querySelector('blockquote')?.textContent).toBe(transcript)
   fireEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }))
-  expect(send.mock.calls.map(([path]) => path).filter((path) => path !== '/api/customers')).toEqual(['/api/voice/parse'])
+  expect(send.mock.calls.map(([path]) => path).filter((path) => path !== '/api/customers' && path !== '/api/receipts')).toEqual(['/api/voice/parse'])
   await record()
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
   await screen.findByRole('heading', { name: 'Transaction saved' })

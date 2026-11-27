@@ -12,6 +12,7 @@
   --color-ink: #15211a;
   --color-muted: #56625a;
   --color-line: #dde4de;
+  --color-mint: #e3f1e9;
 }
 
 @layer base {
@@ -156,6 +157,21 @@
     @apply grid size-6 place-items-center;
   }
 
+  @media (max-width: 63.99rem) {
+    .nav-links a[data-primary] {
+      @apply relative;
+    }
+
+    .nav-links a[data-primary] .nav-icon {
+      @apply -mt-8 mb-0.5 size-14 rounded-full border-4 border-card bg-primary text-white;
+      box-shadow: 0 10px 22px -8px rgb(15 92 65 / .6);
+    }
+
+    .nav-links a[data-primary][aria-current="page"] {
+      @apply bg-transparent text-primary;
+    }
+  }
+
   @media (min-width: 64rem) {
     .app-shell {
       width: auto;
@@ -203,30 +219,178 @@
     @apply mt-6 text-sm leading-relaxed font-medium text-muted;
   }
 
-  .khata-strip {
-    @apply flex w-full items-center justify-between gap-3 rounded-[1.25rem] border border-line bg-card px-4 py-3 text-left;
-    transition: border-color var(--dur-fast) var(--ease-out);
+  .dashboard {
+    @apply flex w-full flex-col gap-5 text-left;
   }
 
-  .khata-strip:hover {
-    @apply border-primary/40;
+  /* The home hero is a page of the shop's khata: ruled lines, a red double margin, dues written in ink. */
+  .khata-page {
+    --rule: 1.75rem;
+    --margin: 1.75rem;
+    @apply relative rounded-[1.25rem] border border-line bg-card pt-2 pr-4 pb-2;
+    padding-left: calc(var(--margin) + .875rem);
+    background-image:
+      linear-gradient(to right, transparent var(--margin), rgb(179 38 30 / .4) var(--margin), rgb(179 38 30 / .4) calc(var(--margin) + 1px),
+        transparent calc(var(--margin) + 1px), transparent calc(var(--margin) + 4px), rgb(179 38 30 / .4) calc(var(--margin) + 4px),
+        rgb(179 38 30 / .4) calc(var(--margin) + 5px), transparent calc(var(--margin) + 5px)),
+      repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--rule) - 1px), #dbe7ee calc(var(--rule) - 1px), #dbe7ee var(--rule));
+    background-position: 0 0, 0 .5rem;
   }
 
-  .khata-figure, .khata-meta {
-    @apply flex min-w-0 flex-col gap-0.5;
+  .khata-head {
+    @apply flex items-baseline justify-between gap-3;
   }
 
-  .khata-figure {
-    @apply shrink-0;
+  .khata-page h2 {
+    @apply text-sm leading-7 font-bold text-muted;
   }
 
-  .khata-meta {
-    @apply items-end text-right;
+  .khata-count {
+    @apply text-xs leading-7 font-semibold text-muted;
   }
 
   .khata-total {
-    @apply font-display text-[1.75rem] leading-tight font-bold tabular-nums;
+    @apply block font-display text-[2rem] leading-[3.5rem] font-extrabold tracking-tight tabular-nums;
     color: var(--dues);
+  }
+
+  /* Ageing and today's totals each sit on one ruled line, as short entries side by side. */
+  .khata-lines {
+    @apply flex flex-wrap gap-x-4;
+  }
+
+  .khata-lines div {
+    @apply flex items-baseline gap-1.5 text-xs leading-7;
+  }
+
+  .khata-lines dt {
+    @apply flex items-center gap-1 text-muted;
+  }
+
+  .khata-lines dd {
+    @apply font-display text-sm font-bold text-ink tabular-nums;
+  }
+
+  .khata-lines [data-age] dt::before {
+    content: "";
+    @apply size-2 rounded-full;
+    background: var(--age);
+  }
+
+  [data-age="0"] { --age: #3f9b72; }
+  [data-age="1"] { --age: #d99a1e; }
+  [data-age="2"] { --age: var(--dues); }
+
+  @media (min-width: 64rem) {
+    .dashboard {
+      @apply grid grid-cols-2 items-start gap-5;
+    }
+
+    .dashboard > .dash-section {
+      @apply col-span-2;
+    }
+  }
+
+  .dash-section {
+    @apply flex flex-col gap-2.5;
+  }
+
+  .dash-section h2 {
+    @apply text-lg leading-tight font-bold;
+  }
+
+  .dash-heading {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .dash-heading a {
+    @apply flex items-center gap-0.5 rounded-full px-2 py-1 text-xs font-semibold text-primary hover:bg-mint;
+  }
+
+  .people-strip {
+    @apply -mx-4 flex gap-2 overflow-x-auto px-4 pb-1;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+
+  .people-strip a {
+    @apply flex w-[4.75rem] flex-col items-center gap-1 rounded-2xl px-1 py-2 text-center hover:bg-card;
+    scroll-snap-align: start;
+  }
+
+  .people-avatar {
+    @apply grid size-12 place-items-center rounded-full border-2 border-card bg-mint font-display text-base font-bold text-primary;
+    box-shadow: 0 0 0 2px rgb(179 38 30 / .35);
+  }
+
+  .people-name {
+    @apply w-full truncate text-xs font-semibold text-ink;
+  }
+
+  .people-strip strong {
+    @apply text-xs font-bold tabular-nums;
+  }
+
+  .ask-list {
+    @apply divide-y divide-line px-3.5;
+  }
+
+  .ask-list li {
+    @apply flex items-center gap-3 py-3;
+  }
+
+  .ask-list .list-copy {
+    @apply flex-1 gap-1;
+  }
+
+  .ask-actions {
+    @apply flex flex-col items-end gap-1.5;
+  }
+
+  .ask-actions strong {
+    @apply font-display text-base leading-none tabular-nums;
+  }
+
+  .remind-pill {
+    @apply inline-flex min-h-8 items-center gap-1 rounded-full bg-primary px-2.5 text-xs font-semibold text-white hover:bg-primary-hover;
+  }
+
+  .status-chip.overdue {
+    color: var(--dues);
+    background: #fbe9e7;
+  }
+
+  .bolo-card {
+    @apply flex flex-col items-center px-4 pt-2 pb-4 text-center;
+  }
+
+  .bolo-card .mic-stage {
+    @apply mt-1;
+    width: min(9.5rem, 44vw);
+  }
+
+  .bolo-card h1 {
+    @apply mt-1 text-[1.375rem];
+  }
+
+  .bolo-card .speak-support {
+    @apply text-sm;
+  }
+
+  .bolo-card .live-transcript {
+    @apply mt-3 min-h-14 text-lg;
+  }
+
+  .example-line {
+    @apply mt-3 w-full rounded-xl bg-surface px-3 py-2.5 text-left text-[.8125rem] leading-relaxed text-ink;
+  }
+
+  .example-line span {
+    @apply mr-1 font-semibold text-primary;
+  }
+
+  .bolo-card .speech-setting {
+    @apply mt-2;
   }
 
   .mic-stage {
@@ -809,6 +973,44 @@
 
   .preview-card h3 {
     @apply font-display text-xl;
+  }
+
+  .chat-thread {
+    @apply flex items-end justify-end gap-2;
+  }
+
+  .bubble-user {
+    @apply m-0 max-w-[88%] rounded-[1.25rem] rounded-br-md bg-mint px-3.5 py-2.5;
+  }
+
+  .bubble-user blockquote {
+    @apply my-1 font-display text-lg leading-snug font-semibold whitespace-pre-wrap text-ink;
+    overflow-wrap: anywhere;
+  }
+
+  .bubble-app {
+    @apply mr-6 rounded-[1.25rem] rounded-bl-md;
+    animation: fade-in var(--dur) var(--ease-out) both;
+  }
+
+  .preview-head {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .listen-button {
+    @apply size-9 rounded-full bg-mint text-primary;
+  }
+
+  .action-rows li > span {
+    @apply flex items-center gap-1.5;
+  }
+
+  .candidate-pills {
+    @apply mt-2 flex flex-wrap gap-1.5;
+  }
+
+  .candidate-pills li {
+    @apply rounded-full border border-line bg-card px-3 py-1 text-sm font-semibold text-ink;
   }
 
   .action-rows {

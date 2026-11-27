@@ -7,14 +7,15 @@ import LanguageSelect from './localization/LanguageSelect'
 import { defaultLocale, interfaceLocales, saveLanguage } from './localization/languages'
 import VoiceEntry from './voice/VoiceEntry'
 
+// Speak sits in the middle of the tab bar as the raised mic, like a single central "add" action.
 const pages = [
-  { id: 'speak', Icon: Mic, Page: VoiceEntry },
   { id: 'customers', Icon: Users, Page: Customers },
+  { id: 'speak', Icon: Mic, Page: VoiceEntry },
   { id: 'receipts', Icon: ReceiptText, Page: Receipts },
 ] as const
 
 function getPage() {
-  return pages.find(({ id }) => window.location.hash === '#' + id) ?? pages[0]
+  return pages.find(({ id }) => window.location.hash === '#' + id) ?? pages[1]
 }
 
 export default function App() {
@@ -71,7 +72,7 @@ export default function App() {
         </div>
         <div className="nav-links">
           {pages.map(({ id, Icon }) => (
-            <a key={id} href={'#' + id} aria-current={page.id === id ? 'page' : undefined}>
+            <a key={id} href={'#' + id} aria-current={page.id === id ? 'page' : undefined} data-primary={id === 'speak' || undefined}>
               <span className="nav-icon"><Icon size={20} strokeWidth={page.id === id ? 2.25 : 1.85} aria-hidden="true" /></span>
               <span>{t(`screens.${id}`)}</span>
             </a>
