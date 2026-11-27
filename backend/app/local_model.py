@@ -6,16 +6,18 @@ resolved against the shop's customers, and the shopkeeper still reviews every en
 """
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
 from functools import lru_cache
 from os import environ
 from unicodedata import normalize
 
-from .number_parser import AmountError, parse_amount_paise
+from .number_parser import _CURRENCY_PREFIX, _CURRENCY_SUFFIX, AmountError, parse_amount_paise
 from .parser import _CASH, _PRONOUNS, _UPI, Intent, PaymentMethod, UnresolvedAction
 
 log = logging.getLogger(__name__)
+_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 _SCHEMA = {
     "type": "object",
@@ -40,8 +42,8 @@ _INSTRUCTIONS = (
     "BALANCE_QUERY when asking how much a customer owes.\n"
     "customer_words: the customer's name copied exactly as written in the sentence, without words like "
     "ko, ne, ka, bhaiya or ji. Use null if no name is said.\n"
-    "amount_words: the amount copied exactly as written in the sentence, digits or words, e.g. '450', "
-    "'Rs 100' or 'साढ़े चार सौ'. Never convert or calculate. Use null for a balance question or if no "
+    "amount_words: the amount copied character for character from the sentence, digits or words, "
+    "e.g. '450' or 'साढ़े चार सौ'. Do not add Rs or ₹ and never convert or calculate. Use null for a balance question or if no "
     "amount is said. If two amounts are said for one payment, use the amount actually paid.\n"
     "method_words: 'cash', 'nakad', 'UPI' etc. only if that word is in the sentence, otherwise null.\n"
     "Each customer transaction is one action. Return no actions if the sentence is not a ledger instruction."
@@ -95,9 +97,13 @@ class LocalModelAdapter:
             name = (proposal.get("customer_words") or "").strip() or None
             amount_text = (proposal.get("amount_words") or "").strip()
             method_text = _fold(proposal.get("method_words") or "")
-            # Hallucination guard: every word the model cites must be in what the shopkeeper said.
-            if any(part and _fold(part) not in said for part in (name, amount_text, method_text)):
+            # Hallucination guard: the name and amount must be words the shopkeeper said. A currency
+            # marker the model adds ("Rs 200" for "200") is not a new fact, so it is ignored here.
+            amount_core = _CURRENCY_SUFFIX.sub("", _CURRENCY_PREFIX.sub("", _fold(amount_text))).strip()
+            if any(part and _fold(part) not in said for part in (name, amount_core)):
                 return None
+            if method_text and method_text not in said:
+                method_text = ""  # An unsaid payment method is dropped, never recorded.
             amount = None
             if amount_text and intent != Intent.BALANCE_QUERY:
                 try:
@@ -110,6 +116,10 @@ class LocalModelAdapter:
                           else PaymentMethod.UPI if method_text in _UPI else None)
             pronoun = name is not None and name.casefold() in _PRONOUNS
             actions.append(UnresolvedAction(intent, None if pronoun else name, amount, method, pronoun))
+        # More numbers said than amounts used means the model picked one ("500 mein se 200"): ask again.
+        numbers = set(_NUMBER.findall(said))
+        if len(numbers) > sum(action.amount_paise is not None for action in actions):
+            return None
         return tuple(actions) or None
 
 

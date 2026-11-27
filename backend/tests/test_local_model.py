@@ -44,8 +44,13 @@ class LocalModelTest(unittest.TestCase):
         self.assertEqual((action.intent, action.amount_paise), (Intent.CREDIT, 45000))
         self.assertEqual(model.calls, 0)
 
+    def test_model_picking_one_of_several_numbers_asks_again(self) -> None:
+        with self.assertRaises(ClarificationRequired):
+            parse_transcript("Ramesh bhaiya ne kal wale 500 mein se 200 de diye", PEOPLE,
+                             fallback=StubModel(act("PAYMENT", "Ramesh bhaiya", "500")))
+
     def test_model_reads_free_speech_and_the_app_parses_the_amount(self) -> None:
-        text = "Ramesh bhaiya ne kal wale 500 mein se 200 de diye cash mein"
+        text = "Ramesh bhaiya ne aaj 200 de diye cash mein"
         action, = parse_transcript(text, PEOPLE, fallback=StubModel(act("PAYMENT", "Ramesh bhaiya", "200", "cash")))
         self.assertEqual((action.intent, action.customer, action.amount_paise, action.payment_method),
                          (Intent.PAYMENT, RAMESH, 20000, PaymentMethod.CASH))
@@ -56,10 +61,13 @@ class LocalModelTest(unittest.TestCase):
     def test_words_the_shopkeeper_did_not_say_are_rejected(self) -> None:
         text = "Ramesh bhaiya ne kal wale paise de diye"
         for proposal in (act("PAYMENT", "Ramesh", "500"),            # amount never said
-                         act("PAYMENT", "Mahesh", None),             # name never said
-                         act("PAYMENT", "Ramesh", None, "UPI")):     # method never said
+                         act("PAYMENT", "Mahesh", "200")):           # name never said
             with self.subTest(proposal=proposal), self.assertRaises(ClarificationRequired):
                 parse_transcript(text, PEOPLE, fallback=StubModel(proposal))
+        # An added currency marker is harmless; an unsaid payment method is dropped, not recorded.
+        action, = parse_transcript("Ramesh ne 200 bheje", PEOPLE,
+                                   fallback=StubModel(act("PAYMENT", "Ramesh", "Rs 200", "UPI")))
+        self.assertEqual((action.amount_paise, action.payment_method), (20000, None))
 
     def test_unclear_amount_and_unknown_customer_still_ask_again(self) -> None:
         with self.assertRaisesRegex(ClarificationRequired, "INVALID_AMOUNT|MISSING_INTENT"):
