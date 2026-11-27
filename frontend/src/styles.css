@@ -1,0 +1,242 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope Variable", "Segoe UI", system-ui, sans-serif;
+  --color-ink: #172c24;
+  --color-muted: #52665b;
+  --color-primary: #156c4e;
+  --color-surface: #f5f8f6;
+  --color-line: #e1e9e4;
+  --color-mint-bar: #a7d6bb;
+}
+
+@layer base {
+  body {
+    @apply min-w-0 bg-surface font-sans text-ink antialiased;
+  }
+
+  :focus-visible {
+    outline: 3px solid #188358;
+    outline-offset: 3px;
+  }
+}
+
+@layer components {
+  .app-shell {
+    @apply min-h-dvh md:grid md:grid-cols-[13rem_minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)];
+  }
+
+  .sidebar {
+    @apply fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white md:sticky md:top-0 md:flex md:h-dvh md:flex-col md:border-t-0 md:border-r;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .sidebar-brand {
+    @apply hidden px-5 pt-6 pb-5 md:block lg:px-6;
+  }
+
+  .brand {
+    @apply inline-flex min-h-11 items-center gap-2.5 rounded-lg text-lg font-extrabold tracking-[-0.055em] lg:text-xl;
+  }
+
+  .brand-mark {
+    @apply grid size-9 shrink-0 place-items-center rounded-[0.7rem] bg-primary text-white;
+  }
+
+  .navigation {
+    @apply grid grid-cols-5 gap-0.5 px-1 py-1.5 max-[360px]:flex max-[360px]:gap-0 max-[360px]:px-0.5 md:flex md:flex-col md:gap-1 md:px-3.5 md:py-3 lg:px-4;
+  }
+
+  .nav-link {
+    @apply flex min-h-13 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 text-center text-xs leading-tight font-bold text-muted transition-colors hover:bg-surface max-[360px]:min-w-11 max-[360px]:flex-auto md:min-h-12 md:flex-row md:justify-start md:gap-3 md:px-3 md:text-left md:text-sm;
+  }
+
+  .nav-link[aria-current="page"] {
+    @apply bg-[#e4f2ea] text-[#125c41];
+  }
+
+  .nav-link:focus-visible {
+    outline-offset: -3px;
+  }
+
+  .shop-card {
+    @apply mx-4 mt-auto mb-5 items-center gap-2.5 rounded-xl border border-line bg-surface p-3 lg:mx-5;
+  }
+
+  .topbar {
+    @apply flex min-h-17 items-center justify-between gap-3 border-b border-line bg-white px-4 sm:px-7 md:min-h-18 xl:px-9;
+  }
+
+  .sample-label,
+  .period-label {
+    @apply inline-flex shrink-0 items-center gap-1.5 rounded-full font-bold whitespace-nowrap;
+  }
+
+  .sample-label {
+    @apply bg-[#eaf4ed] px-2.5 py-1.5 text-xs text-[#255f45] sm:px-3 sm:text-sm;
+  }
+
+  .period-label {
+    @apply bg-surface px-2.5 py-1.5 text-xs text-muted;
+  }
+
+  .content {
+    @apply mx-auto flex max-w-[90rem] min-w-0 flex-col gap-5 px-4 pt-6 sm:gap-6 sm:px-7 sm:pt-8 xl:px-9;
+    padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+  }
+
+  @media (width >= 48rem) {
+    .content {
+      padding-bottom: 2.5rem;
+    }
+  }
+
+  .skip-link {
+    @apply fixed top-2 left-2 z-30 -translate-y-32 rounded-lg bg-primary px-4 py-3 font-bold text-white focus:translate-y-0;
+  }
+
+  .page-heading {
+    @apply text-[1.8rem] leading-tight font-extrabold tracking-[-0.045em] sm:text-[2.2rem];
+  }
+
+  .page-intro {
+    @apply mt-1.5 text-base leading-relaxed text-muted;
+  }
+
+  .section-heading {
+    @apply text-[1.1rem] leading-tight font-extrabold tracking-tight;
+  }
+
+  .panel {
+    @apply rounded-[1rem] border border-line bg-white;
+    box-shadow: 0 2px 3px #16332605;
+  }
+
+  .voice-hero {
+    @apply text-white;
+    background: linear-gradient(113deg, #124532 0%, #14543d 58%, #176349 100%);
+  }
+
+  .hero-label {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-white/12 px-2.5 py-1 text-xs font-extrabold tracking-wide text-[#e1f7eb] sm:text-sm;
+  }
+
+  .button {
+    @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[0.65rem] px-4 py-2 text-sm font-extrabold transition-colors;
+  }
+
+  .button-hero {
+    @apply bg-[#d2f3dc] text-[#12432f] hover:bg-white;
+  }
+
+  .button-hero:focus-visible {
+    outline-color: white;
+  }
+
+  .button-primary {
+    @apply bg-primary text-white hover:bg-[#125a42];
+  }
+
+  .voice-art {
+    @apply pointer-events-none absolute top-0 right-0 bottom-0 w-[40%] max-w-[26rem] place-items-center;
+    background: radial-gradient(circle, #b7f7d44d 1px, transparent 1.5px) 50% 50% / 17px 17px;
+    mask-image: radial-gradient(ellipse, black 35%, transparent 75%);
+  }
+
+  .voice-ring {
+    @apply absolute aspect-square rounded-full border;
+    border-color: #acffd042;
+  }
+
+  .voice-ring-outer {
+    @apply w-68;
+  }
+
+  .voice-ring-middle {
+    @apply w-51;
+  }
+
+  .voice-ring-inner {
+    @apply w-37;
+    background: #14563f;
+  }
+
+  .voice-orb {
+    @apply z-1 grid size-[6.6rem] place-items-center rounded-full text-[#144c37];
+    background: linear-gradient(150deg, #d5f7df, #8bd6ab);
+    box-shadow: 0 0 0 0.45rem #91e7b528, 0 10px 30px #092e2270;
+  }
+
+  .voice-wave {
+    @apply absolute flex items-center gap-1 text-[#9ce4b8];
+  }
+
+  .voice-wave-left {
+    right: calc(50% + 5.2rem);
+  }
+
+  .voice-wave-right {
+    left: calc(50% + 5.2rem);
+    flex-direction: row-reverse;
+  }
+
+  .voice-wave i {
+    @apply block h-3 w-0.75 rounded-full bg-current;
+  }
+
+  .voice-wave i:nth-child(2) {
+    @apply h-6;
+  }
+
+  .voice-wave i:nth-child(3) {
+    @apply h-9;
+  }
+
+  .voice-wave i:nth-child(4) {
+    @apply h-5;
+  }
+
+  .stat-icon {
+    @apply grid size-9 shrink-0 place-items-center rounded-[0.65rem];
+  }
+
+  .customer-avatar {
+    @apply grid size-9 shrink-0 place-items-center rounded-full text-xs font-extrabold sm:size-10 sm:text-sm;
+  }
+
+  .avatar-sage {
+    @apply bg-[#e2f2e8] text-[#206047];
+  }
+
+  .avatar-blue {
+    @apply bg-[#e6effa] text-[#27557c];
+  }
+
+  .avatar-sand {
+    @apply bg-[#f9eed9] text-[#785419];
+  }
+
+  .avatar-lilac {
+    @apply bg-[#f0eafa] text-[#5c457e];
+  }
+
+  .activity-row {
+    @apply grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 py-2.5 sm:gap-3.5;
+  }
+
+  .summary-row {
+    @apply flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 text-sm font-bold;
+  }
+
+  .summary-row dt {
+    @apply flex items-center gap-2.5 text-muted;
+  }
+
+  .summary-row dd {
+    @apply font-extrabold tabular-nums;
+  }
+
+  .summary-dot {
+    @apply size-2.5 shrink-0 rounded-full;
+  }
+}

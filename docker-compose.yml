@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_PATH: /data/bolohisaab.sqlite3
+    volumes:
+      - sqlite_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/health', timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${BOLOHISAAB_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+        restart: true
+
+volumes:
+  sqlite_data:
