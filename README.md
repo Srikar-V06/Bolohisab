@@ -28,6 +28,24 @@ A healthy response is HTTP 200 with:
 
 The backend stores SQLite data in the named `sqlite_data` volume. Run `docker compose down` to stop the app and keep the volume.
 
+## Customers and ledger
+
+The customer API uses the local shop created during database initialization. Send `{"name":"Ramesh"}` to `POST /api/customers` to create a customer. Use `GET /api/customers` to list customers and their balances, `GET /api/customers/{id}` to retrieve one customer, and `GET /api/customers/{id}/ledger` to see entries in posting order.
+
+All ledger amounts and balances are in integer paise. Supply a positive amount for `CREDIT` or `PAYMENT`. A payment lowers the balance. Supply a signed, nonzero amount for an `ADJUSTMENT`. A correction is an adjustment with `corrects_entry_id` pointing to an earlier entry for the same customer. A negative balance represents an overpayment.
+
+Backend callers use `app.ledger.ledger_session(path, write=True)` to create a batch of `LedgerEntryDraft` records with `create_transaction_batch` or a single entry with `create_ledger_entry`. Reuse the same shop and batch ID when retrying. The original batch is returned for identical entries and voice metadata. Reusing an ID with different content raises `BatchConflict`. Use a read session for `calculate_balance` and `get_transaction_history`.
+
+### Seed demo data
+
+Run from the repository root while Compose is up:
+
+```sh
+docker compose exec backend python -m app.seed_demo
+```
+
+For local development, run `python -m app.seed_demo` from `backend/`. The script adds Ramesh, Suresh, and Sita with sample purchases and cash payments to the local kirana shop. It can be run repeatedly without duplicating the demo. Ramesh’s balance is 125,000 paise (₹1,250) after a ₹1,000 opening credit, a ₹450 purchase, and a ₹200 payment.
+
 ## Run locally without Docker
 
 Use Python 3.12 and Node.js 22.12 or newer.

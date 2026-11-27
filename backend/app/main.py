@@ -1,4 +1,3 @@
-import os
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -6,11 +5,12 @@ from typing import AsyncIterator, Literal
 
 from fastapi import FastAPI, HTTPException
 
-from .database import check_database, initialize_database
+from .customers import router as customer_router
+from .database import check_database, database_path as configured_database_path, initialize_database
 
 
 def create_app(database_path: Path | None = None) -> FastAPI:
-    path = database_path or Path(os.environ.get("DATABASE_PATH", "data/bolohisaab.sqlite3"))
+    path = database_path or configured_database_path()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -18,6 +18,8 @@ def create_app(database_path: Path | None = None) -> FastAPI:
         yield
 
     app = FastAPI(title="BoloHisaab API", version="0.1.0", lifespan=lifespan)
+    app.state.database_path = path
+    app.include_router(customer_router)
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict[str, Literal["ok", "connected"]]:
