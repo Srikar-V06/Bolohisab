@@ -70,6 +70,11 @@
     "en-IN": "Indian English"
   },
   "customerList": {
+    "highest": "Highest dues first",
+    "lowest": "Lowest dues first",
+    "after": "Balance {{amount}}",
+    "clear": "Clear filters",
+    "settledCount": "{{count}} settled",
     "search": "Search customer name",
     "total": "Total outstanding",
     "count_one": "{{count}} customer with dues",
