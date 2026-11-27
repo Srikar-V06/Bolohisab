@@ -48,6 +48,10 @@ The backend stores SQLite data in the named `sqlite_data` volume. Run `docker co
 
 The customer API uses the local shop created during database initialization. Send `{"name":"Ramesh"}` to `POST /api/customers` to create a customer. Use `GET /api/customers` to list customers and their balances, `GET /api/customers/{id}` to retrieve one customer, and `GET /api/customers/{id}/ledger` to see entries in posting order.
 
+The Customers screen fetches history five at a time through `GET /api/customers/{id}/ledger?limit=5`. This form returns `items`, `next_cursor`, and `has_more`. Pass the opaque `next_cursor` as the `cursor` query parameter to fetch the next page from the same snapshot. Items are ordered by `created_at DESC, id DESC` and each includes `balance_after_paise`. The original request with no query parameters still returns the full list.
+
+Customer details and receipt previews open as bottom sheets on phones, centred dialogs on tablets, and panels beside their lists on desktop.
+
 All ledger amounts and balances are in integer paise. Supply a positive amount for `CREDIT` or `PAYMENT`. A payment lowers the balance. Supply a signed, nonzero amount for an `ADJUSTMENT`. A correction is an adjustment with `corrects_entry_id` pointing to an earlier entry for the same customer. A negative balance represents an overpayment.
 
 Backend callers use `app.ledger.ledger_session(path, write=True)` to create a batch of `LedgerEntryDraft` records with `create_transaction_batch` or a single entry with `create_ledger_entry`. Reuse the same shop and batch ID when retrying. The original batch is returned for identical entries and voice metadata. Reusing an ID with different content raises `BatchConflict`. Use a read session for `calculate_balance` and `get_transaction_history`.

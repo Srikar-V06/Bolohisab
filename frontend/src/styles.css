@@ -345,6 +345,114 @@
     @apply flex flex-col gap-3;
   }
 
+  .split-list {
+    @apply flex min-w-0 flex-col gap-3;
+  }
+
+  .split-list :is(.customer-row, .receipt-row)[aria-current="true"] {
+    background: var(--mint);
+  }
+
+  .inline-detail {
+    @apply sticky top-4 min-w-0 overflow-auto overscroll-contain;
+    max-height: calc(100dvh - 2rem);
+  }
+
+  .inline-detail .sheet-header {
+    background: var(--color-card);
+  }
+
+  .inline-detail h2:focus {
+    outline: none;
+  }
+
+  .history-amount {
+    @apply min-w-0 text-right;
+    overflow-wrap: anywhere;
+  }
+
+  .history-more {
+    @apply self-center;
+  }
+
+  .history-end {
+    @apply text-center;
+  }
+
+  @media (width < 48rem) {
+    .app-shell {
+      width: 100%;
+    }
+
+    .bottom-nav {
+      width: calc(100% - 2 * var(--nav-inset));
+    }
+
+    .split-view .sheet {
+      width: 100%;
+    }
+  }
+
+  @media (48rem <= width < 64rem) {
+    .app-shell {
+      display: grid;
+      width: min(100%, var(--content-width));
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .app-header {
+      grid-row: 1;
+    }
+
+    .bottom-nav {
+      position: sticky;
+      top: .5rem;
+      bottom: auto;
+      grid-row: 2;
+      width: calc(100% - 2rem);
+      margin-bottom: 1rem;
+    }
+
+    .nav-links a {
+      @apply min-h-11 flex-row gap-2;
+    }
+
+    .page-content {
+      grid-row: 3;
+      padding-bottom: 2rem;
+    }
+
+    .split-view .sheet {
+      inset: 0;
+      width: min(calc(100% - 2rem), 36rem);
+      height: fit-content;
+      margin: auto;
+      border-radius: 1.25rem;
+    }
+
+    .split-view .sheet[open] {
+      animation-name: fade-in;
+    }
+
+    .split-view .sheet-body::before {
+      display: none;
+    }
+  }
+
+  @media (width >= 64rem) {
+    .app-shell:has(.split-view) {
+      --content-width: 70rem;
+    }
+
+    .split-view[data-detail="false"] > .split-list {
+      max-width: 44rem;
+    }
+
+    .split-view[data-detail="true"] {
+      @apply grid grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] items-start gap-4;
+    }
+  }
+
   .customer-register {
     @apply divide-y divide-line rounded-2xl border border-line bg-card;
   }

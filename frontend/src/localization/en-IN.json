@@ -87,6 +87,8 @@
     "noResults": "No customers match your search or filter.",
     "lastEmpty": "No transactions yet",
     "history": "Transaction history",
+    "loadMore": "Load more",
+    "historyEnd": "All transactions shown.",
     "current": "Current balance",
     "filters": "Filter customers"
   },

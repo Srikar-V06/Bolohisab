@@ -1,11 +1,13 @@
-import { useCallback, useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowDownUp, ChevronRight, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api } from './api'
 import type { Customer } from './api'
-import { initials, money, transactionDate, transactionDays, transactionLabel } from './format'
+import { initials, money, transactionDate, transactionDays } from './format'
 import type { Locale } from './localization/languages'
-import { LoadError, Loading, Sheet, useLoad } from './components'
+import { LoadError, Loading, useLoad } from './components'
+import ResponsiveDetail from './ResponsiveDetail'
+import { useLedgerHistory } from './useLedgerHistory'
 
 const filters = ['all', 'outstanding', 'settled'] as const
 type Filter = typeof filters[number]
@@ -26,44 +28,43 @@ function avatarTint(name: string) {
 
 function CustomerDetail({ customer, language, close }: { customer: Customer; language: Locale; close: () => void }) {
   const { t } = useTranslation()
-  const load = useCallback((signal: AbortSignal) => api.ledger(customer.id, signal), [customer.id])
-  const { data, error, retry } = useLoad(load)
-
-  let balance = 0n
-  const posted = (data ?? []).map(entry => {
-    const amount = BigInt(entry.amount_paise)
-    balance += entry.type === 'PAYMENT' ? -amount : amount
-    return { ...entry, balance }
-  })
+  const { entries, error, loading, nextCursor, loadNext } = useLedgerHistory(customer.id)
+  const currentBalance = entries ? entries[0]?.balance_after_paise ?? 0 : customer.balance_paise
 
   return (
-    <Sheet title={customer.name} close={close}>
+    <ResponsiveDetail title={customer.name} close={close}>
       <div className="summary-card card">
         <p className="subtle">{t('customerList.total')}</p>
-        <p className="summary-value font-display">{money(Math.max(0, customer.balance_paise))}</p>
+        <p className="summary-value font-display">{money(Math.max(0, currentBalance))}</p>
       </div>
       <h3 className="sheet-section">{t('customerList.history')}</h3>
-      {error ? <LoadError error={error} retry={retry} /> : !data ? <Loading text={t('common.loading')} />
-        : data.length === 0 ? <p className="notice">{t('customerList.lastEmpty')}</p>
-          : transactionDays(posted.reverse(), language).map(day => (
+      {entries === undefined ? !error && <Loading rows={5} text={t('common.loading')} />
+        : entries.length === 0 ? <p className="notice">{t('customerList.lastEmpty')}</p>
+          : transactionDays(entries, language).map(day => (
           <section key={day.key} className="ledger-day">
             <h4>{day.label}</h4>
             <ul className="history-list">{day.entries.map((entry) => (
               <li key={entry.id}>
                 <div>
-                  <p>{transactionLabel(t, entry.type, entry.payment_method)}</p>
+                  <p>{t(`entry.type.${entry.type}`)}</p>
+                  {entry.payment_method && <p className="subtle">{t(`entry.method.${entry.payment_method}`)}</p>}
                   <time className="subtle" dateTime={entry.created_at}>{transactionDate(entry.created_at, language)}</time>
                 </div>
-                <div className="text-right"><strong className={entry.type === 'CREDIT' ? 'red' : entry.type === 'PAYMENT' ? 'green' : undefined}>
-                  {money(entry.amount_paise)}
+                <div className="history-amount"><strong className={entry.balance_effect_paise > 0 ? 'red' : 'green'}>
+                  {entry.balance_effect_paise > 0 && <span aria-hidden="true">+</span>}
+                  <span>{money(entry.balance_effect_paise)}</span>
                 </strong>
-                  <p className="subtle font-display tabular-nums">{t('customerList.after', { amount: money(entry.balance) })}</p>
+                  <p className="subtle tabular-nums">{t('customerList.after', { amount: money(entry.balance_after_paise) })}</p>
                 </div>
               </li>
             ))}</ul>
           </section>))}
-      <div className="info-row current-total"><span>{t('customerList.current')}</span><strong>{money(customer.balance_paise)}</strong></div>
-    </Sheet>
+      {error ? <LoadError error={error} retry={loadNext} /> : nextCursor ? (
+        <button className="button button-secondary history-more" type="button" disabled={loading}
+          onClick={loadNext}>{t(loading ? 'common.loading' : 'customerList.loadMore')}</button>
+      ) : Boolean(entries?.length) && <p className="subtle history-end" role="status">{t('customerList.historyEnd')}</p>}
+      <div className="info-row current-total"><span>{t('customerList.current')}</span><strong>{money(currentBalance)}</strong></div>
+    </ResponsiveDetail>
   )
 }
 
@@ -74,6 +75,7 @@ export default function Customers({ language }: { language: Locale }) {
   const [filter, setFilter] = useState<Filter>('all')
   const [highestFirst, setHighestFirst] = useState(true)
   const [selected, setSelected] = useState<Customer>()
+  const detailTrigger = useRef<HTMLButtonElement>(null)
   const withDues = data?.filter(({ balance_paise }) => balance_paise > 0) ?? []
   const total = withDues.reduce((sum, row) => sum + BigInt(row.balance_paise), 0n)
   const visible = data ? filterCustomers(data, search, filter).sort((a, b) =>
@@ -81,7 +83,8 @@ export default function Customers({ language }: { language: Locale }) {
     || a.name.localeCompare(b.name, language) || a.id - b.id) : []
 
   return (
-    <div className="customers-page">
+    <div className="customers-page split-view" data-detail={Boolean(selected)}>
+      <div className="split-list">
       {error ? <LoadError error={error} retry={retry} /> : !data ? <Loading text={t('common.loading')} /> : (
         <>
           <section className="summary-card card" aria-label={t('customerList.total')}>
@@ -118,7 +121,11 @@ export default function Customers({ language }: { language: Locale }) {
                 const outstanding = customer.balance_paise > 0
                 return (
                   <li key={customer.id}>
-                    <button className="customer-row" type="button" onClick={() => setSelected(customer)}>
+                    <button className="customer-row" type="button" aria-current={selected?.id === customer.id || undefined}
+                      onClick={(event) => {
+                        detailTrigger.current = event.currentTarget
+                        setSelected(customer)
+                      }}>
                       <span className={'customer-initial ' + avatarTint(customer.name)} aria-hidden="true">{initials(customer.name, language)}</span>
                       <span className="list-copy">
                         <strong>{customer.name}</strong>
@@ -138,7 +145,11 @@ export default function Customers({ language }: { language: Locale }) {
             </ul>}
         </>
       )}
-      {selected && <CustomerDetail customer={selected} language={language} close={() => setSelected(undefined)} />}
+      </div>
+      {selected && <CustomerDetail key={selected.id} customer={selected} language={language} close={() => {
+        setSelected(undefined)
+        detailTrigger.current?.focus()
+      }} />}
     </div>
   )
 }

@@ -3,7 +3,8 @@ import { ArrowDownLeft, ArrowUpRight, Check, Clock3, Link2, SlidersHorizontal, R
 import { useTranslation } from 'react-i18next'
 import { api } from './api'
 import type { Receipt } from './api'
-import { LoadError, Loading, Sheet, useLoad } from './components'
+import { LoadError, Loading, useLoad } from './components'
+import ResponsiveDetail from './ResponsiveDetail'
 import { money, transactionDate, transactionDays, transactionLabel } from './format'
 import LanguageSelect from './localization/LanguageSelect'
 import { interfaceLocales, readLanguage, saveLanguage } from './localization/languages'
@@ -122,7 +123,7 @@ function ReceiptPreview({ item, close, update }: { item: Receipt; close: () => v
   }
 
   return (
-    <Sheet title={t('receiptList.preview')} close={close} locked={pending}>
+    <ResponsiveDetail title={t('receiptList.preview')} close={close} locked={pending}>
       <LanguageSelect label={t('receiptList.language')} locales={interfaceLocales} value={language} disabled={pending}
         onChange={(locale) => {
           stopReading()
@@ -165,7 +166,7 @@ function ReceiptPreview({ item, close, update }: { item: Receipt; close: () => v
         </div>
       )}
       {message && <p className="notice" role="status">{t(message)}</p>}
-    </Sheet>
+    </ResponsiveDetail>
   )
 }
 
@@ -174,12 +175,14 @@ export default function Receipts({ language }: { language: Locale }) {
   const { data, error, retry, setData } = useLoad(api.receipts)
   const [tab, setTab] = useState<'awaiting' | 'sent'>('awaiting')
   const [selectedId, setSelectedId] = useState<number>()
+  const detailTrigger = useRef<HTMLButtonElement>(null)
   const awaiting = data?.filter((item) => !item.sent_at).length ?? 0
   const selected = data?.find((item) => item.entry_id === selectedId)
   const items = data?.filter((item) => Boolean(item.sent_at) === (tab === 'sent')) ?? []
 
   return (
-    <div className="receipts-page">
+    <div className="receipts-page split-view" data-detail={Boolean(selected)}>
+      <div className="split-list">
       <div className="receipt-tabs" role="group" aria-label={t('receiptList.tabs')}>
         <button type="button" aria-pressed={tab === 'awaiting'} onClick={() => setTab('awaiting')}>
           {t('receiptList.awaiting')} {awaiting > 0 && <span className="count-dot">{awaiting}</span>}
@@ -195,7 +198,11 @@ export default function Receipts({ language }: { language: Locale }) {
               const Icon = item.type === 'CREDIT' ? ArrowUpRight : item.type === 'PAYMENT' ? ArrowDownLeft : SlidersHorizontal
               return (
               <li key={item.entry_id}>
-                <button className="receipt-row" type="button" onClick={() => setSelectedId(item.entry_id)}>
+                <button className="receipt-row" type="button" aria-current={selectedId === item.entry_id || undefined}
+                  onClick={(event) => {
+                    detailTrigger.current = event.currentTarget
+                    setSelectedId(item.entry_id)
+                  }}>
                   <span className="receipt-kind"><Icon size={19} aria-hidden="true" /></span>
                   <span className="list-copy">
                     <strong>{item.customer_name}</strong>
@@ -216,7 +223,11 @@ export default function Receipts({ language }: { language: Locale }) {
               )
             })}</ul>
           </section>))}
-      {selected && <ReceiptPreview item={selected} close={() => setSelectedId(undefined)}
+      </div>
+      {selected && <ReceiptPreview key={selected.entry_id} item={selected} close={() => {
+        setSelectedId(undefined)
+        detailTrigger.current?.focus()
+      }}
         update={(item) => setData((rows) => rows?.map((row) => row.entry_id === item.entry_id ? item : row))} />}
     </div>
   )

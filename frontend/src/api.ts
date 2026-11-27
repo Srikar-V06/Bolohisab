@@ -12,6 +12,15 @@ export type LedgerEntry = {
   payment_method: PaymentMethod | null
   created_at: string
 }
+export type HistoryEntry = LedgerEntry & {
+  balance_effect_paise: number
+  balance_after_paise: number
+}
+export type LedgerPage = {
+  items: HistoryEntry[]
+  next_cursor: string | null
+  has_more: boolean
+}
 export type PreviewBalance = {
   customer: CustomerIdentity
   previous_balance_paise: number
@@ -74,7 +83,11 @@ function post<T>(path: string, body: object, signal?: AbortSignal) {
 
 export const api = {
   customers: (signal?: AbortSignal) => request<Customer[]>('/customers', { signal }),
-  ledger: (id: number, signal?: AbortSignal) => request<LedgerEntry[]>(`/customers/${id}/ledger`, { signal }),
+  ledger: (id: number, cursor: string | null, signal: AbortSignal) => {
+    const query = new URLSearchParams({ limit: '5' })
+    if (cursor) query.set('cursor', cursor)
+    return request<LedgerPage>(`/customers/${id}/ledger?${query}`, { signal })
+  },
   parse: (original_transcript: string, interface_language: Locale, speech_language: Locale, signal: AbortSignal) =>
     post<ParseResult>('/voice/parse', { original_transcript, interface_language, speech_language }, signal),
   confirm: (result: ParseResult, batch_id: string) => {

@@ -100,6 +100,18 @@ class LedgerEntry:
 
 
 @dataclass(frozen=True)
+class LedgerHistoryItem(LedgerEntry):
+    balance_after_paise: int
+
+
+@dataclass(frozen=True)
+class LedgerHistoryCursor:
+    created_at: str
+    entry_id: int
+    snapshot_id: int
+
+
+@dataclass(frozen=True)
 class TransactionBatch:
     id: str
     shop_id: int
@@ -162,6 +174,65 @@ class Ledger:
         validate_id(customer_id, "customer_id")
         self._require_customer(shop_id, customer_id)
         return self._read_entries(shop_id, customer_id=customer_id)
+
+    def get_transaction_history_page(
+        self, shop_id: int, customer_id: int, limit: int, cursor: LedgerHistoryCursor | None,
+    ) -> tuple[list[LedgerHistoryItem], LedgerHistoryCursor | None]:
+        validate_id(shop_id, "shop_id")
+        validate_id(customer_id, "customer_id")
+        if type(limit) is not int or not 1 <= limit <= 50:
+            raise ValueError("Invalid ledger page size")
+        self._require_customer(shop_id, customer_id)
+
+        scope = (shop_id, customer_id)
+        if cursor is None:
+            snapshot_id = self.connection.execute(
+                "SELECT coalesce(max(id), 0) FROM ledger_entries WHERE shop_id = ? AND customer_id = ?", scope,
+            ).fetchone()[0]
+            before = ()
+        else:
+            anchor = self.connection.execute(
+                "SELECT 1 FROM ledger_entries WHERE shop_id = ? AND customer_id = ? AND id = ? AND created_at = ?",
+                (*scope, cursor.entry_id, cursor.created_at),
+            ).fetchone()
+            if anchor is None:
+                raise ValueError("Invalid ledger cursor")
+            snapshot_id = cursor.snapshot_id
+            before = (cursor.created_at, cursor.entry_id)
+
+        cursor_filter = "AND (entry.created_at, entry.id) < (?, ?)" if before else ""
+        rows = self.connection.execute(
+            f"""
+            SELECT entry.*, batch.original_transcript, batch.detected_language
+            FROM ledger_entries AS entry
+            JOIN transaction_batches AS batch ON batch.shop_id = entry.shop_id AND batch.id = entry.batch_id
+            WHERE entry.shop_id = ? AND entry.customer_id = ? AND entry.id <= ?
+              {cursor_filter}
+            ORDER BY entry.created_at DESC, entry.id DESC
+            LIMIT ?
+            """,
+            (*scope, snapshot_id, *before, limit + 1),
+        ).fetchall()
+        if not rows:
+            return [], None
+
+        # Sum in Python to preserve exact balances beyond SQLite's 64-bit SUM range.
+        effects = self.connection.execute(
+            """
+            SELECT balance_effect_paise FROM ledger_entries
+            WHERE shop_id = ? AND customer_id = ? AND id <= ? AND (created_at, id) <= (?, ?)
+            """,
+            (*scope, snapshot_id, rows[0]["created_at"], rows[0]["id"]),
+        )
+        balance = sum(effect[0] for effect in effects)
+        page = []
+        for row in rows[:limit]:
+            page.append(LedgerHistoryItem(**dict(row), balance_after_paise=balance))
+            balance -= row["balance_effect_paise"]
+
+        last = page[-1]
+        next_cursor = LedgerHistoryCursor(last.created_at, last.id, snapshot_id) if len(rows) > limit else None
+        return page, next_cursor
 
     def get_batch(self, shop_id: int, batch_id: str) -> TransactionBatch | None:
         row = self.connection.execute(

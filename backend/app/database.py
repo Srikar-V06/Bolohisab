@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_SHOP_ID = 1
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def database_path() -> Path:
@@ -43,13 +43,15 @@ def initialize_database(path: Path) -> None:
         connection.execute("PRAGMA journal_mode = WAL").fetchone()
     with database_transaction(path, write=True) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (0, 1, SCHEMA_VERSION):
+        if not 0 <= version <= SCHEMA_VERSION:
             raise RuntimeError(f"Unsupported ledger schema version: {version}")
         if version == 0:
             connection.executescript(Path(__file__).with_name("schema.sql").read_text(encoding="utf-8"))
         if version < 2:
             connection.executescript(Path(__file__).with_name("receipts_migration.sql").read_text(encoding="utf-8"))
-            connection.execute("PRAGMA user_version = 2")
+        if version < 3:
+            connection.executescript(Path(__file__).with_name("ledger_pagination_migration.sql").read_text(encoding="utf-8"))
+            connection.execute("PRAGMA user_version = 3")
 
 
 def check_database(path: Path) -> None:

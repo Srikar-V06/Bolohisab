@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
 
-from app.database import DEFAULT_SHOP_ID
+from app.database import DEFAULT_SHOP_ID, database_transaction
 from app.ledger import LedgerEntryDraft, ledger_session
 from app.main import create_app
 
@@ -53,3 +53,71 @@ class CustomerApiTest(unittest.TestCase):
             self.assertEqual(self.client.get(path).status_code, 404)
         for path in ("/api/customers/not-an-id", "/api/customers/0", "/api/customers/9223372036854775808/ledger"):
             self.assertEqual(self.client.get(path).status_code, 422)
+
+    def test_cursor_pages_same_timestamp_entries_with_exact_running_balances(self) -> None:
+        customer = self.client.post("/api/customers", json={"name": "Ramesh"}).json()
+        customer_id = customer["id"]
+        url = f"/api/customers/{customer_id}/ledger"
+        timestamp = "2026-11-26T06:12:00.000Z"
+
+        with database_transaction(self.path, write=True) as connection:
+            connection.execute("INSERT INTO transaction_batches (shop_id, id) VALUES (1, 'pagination')")
+            rows = [
+                (customer_id, "CREDIT", 10_000, timestamp if index != 9 else "2026-11-25T06:12:00.000Z")
+                for index in range(10)
+            ] + [(customer_id, "PAYMENT", 7_500, timestamp), (customer_id, "ADJUSTMENT", -500, timestamp)]
+            connection.executemany(
+                """
+                INSERT INTO ledger_entries (shop_id, batch_id, customer_id, type, amount_paise, created_at)
+                VALUES (1, 'pagination', ?, ?, ?, ?)
+                """,
+                rows,
+            )
+
+        first = self.client.get(url, params={"limit": 5}).json()
+        self.assertEqual([row["id"] for row in first["items"]], [12, 11, 9, 8, 7])
+        self.assertEqual([row["balance_after_paise"] for row in first["items"]], [92_000, 92_500, 100_000, 90_000, 80_000])
+        self.assertTrue(first["has_more"])
+
+        # A backdated append must not change an already-open history snapshot.
+        with database_transaction(self.path, write=True) as connection:
+            connection.execute(
+                """
+                INSERT INTO ledger_entries (shop_id, batch_id, customer_id, type, amount_paise, created_at)
+                VALUES (1, 'pagination', ?, 'CREDIT', 100, '2026-11-24T06:12:00.000Z')
+                """,
+                (customer_id,),
+            )
+
+        second = self.client.get(url, params={"limit": 5, "cursor": first["next_cursor"]}).json()
+        self.assertEqual([row["id"] for row in second["items"]], [6, 5, 4, 3, 2])
+        self.assertEqual(second["items"][0]["balance_after_paise"], 70_000)
+        self.assertTrue(second["has_more"])
+
+        final = self.client.get(url, params={"cursor": second["next_cursor"]}).json()
+        self.assertEqual([row["id"] for row in final["items"]], [1, 10])
+        self.assertEqual([row["balance_after_paise"] for row in final["items"]], [20_000, 10_000])
+        self.assertEqual(final["has_more"], False)
+        self.assertIsNone(final["next_cursor"])
+        self.assertEqual(self.client.get(url, params={"limit": 1}).json()["items"][0]["balance_after_paise"], 92_100)
+
+    def test_paged_history_empty_limits_and_cursor_customer_scope(self) -> None:
+        first = self.client.post("/api/customers", json={"name": "Ramesh"}).json()["id"]
+        second = self.client.post("/api/customers", json={"name": "Sita"}).json()["id"]
+        self.assertEqual(
+            self.client.get(f"/api/customers/{second}/ledger?limit=5").json(),
+            {"items": [], "has_more": False, "next_cursor": None},
+        )
+        with ledger_session(self.path, write=True) as ledger:
+            ledger.create_transaction_batch(DEFAULT_SHOP_ID, "scope", [
+                LedgerEntryDraft(first, "CREDIT", 10_000), LedgerEntryDraft(first, "PAYMENT", 100),
+            ])
+            ledger.connection.execute("INSERT INTO shops (id, name) VALUES (2, 'Other shop')")
+            other_shop = ledger.create_customer(2, "Mohan").id
+        url = f"/api/customers/{first}/ledger"
+        token = self.client.get(url, params={"limit": 1}).json()["next_cursor"]
+        self.assertEqual(self.client.get(f"/api/customers/{second}/ledger", params={"cursor": token}).status_code, 422)
+        self.assertEqual(self.client.get(f"/api/customers/{other_shop}/ledger?limit=1").status_code, 404)
+        self.assertEqual(self.client.get(url, params={"cursor": "broken!"}).status_code, 422)
+        self.assertEqual(self.client.get(url, params={"limit": 0}).status_code, 422)
+        self.assertEqual(self.client.get(url, params={"limit": 51}).status_code, 422)

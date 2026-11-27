@@ -96,7 +96,7 @@ it('shows actual totals, filters by status and name, and opens a customer ledger
       { id: 8, name: 'Sunita Devi', balance_paise: 240000, last_transaction_at: timestamp },
       { id: 12, name: 'Mohan', balance_paise: 0, last_transaction_at: null },
     ])
-    : json([entry]))
+    : json({ items: [{ ...entry, balance_effect_paise: 45000, balance_after_paise: 125000 }], has_more: false, next_cursor: null }))
   render(<App />)
   await navigate('Customers')
   await screen.findByText('₹3,650')
@@ -111,6 +111,78 @@ it('shows actual totals, filters by status and name, and opens a customer ledger
   await within(sheet).findByText('₹450')
   expect(within(sheet).getByText('Current balance')).toBeTruthy()
   expect(window.location.hash).toBe('#customers')
+})
+
+it('loads five from the API, keeps them on failure, and appends unique items on retry', async () => {
+  await i18n.changeLanguage('en-IN')
+  const makeEntries = (ids: number[]) => ids.map((id) => ({
+    ...entry, id, amount_paise: id * 100, balance_effect_paise: id * 100, balance_after_paise: id * 500,
+  }))
+  let finishNext: (response: Response) => void = () => {}
+  let attempts = 0
+  send.mockImplementation((path: string) => {
+    if (path === '/api/customers') return json([
+      { ...customer, balance_paise: 5000, last_transaction_at: timestamp },
+      { id: 8, name: 'Sunita Devi', balance_paise: 0, last_transaction_at: null },
+    ])
+    if (path === '/api/customers/8/ledger?limit=5') return json({ items: [], has_more: false, next_cursor: null })
+    if (path === '/api/customers/7/ledger?limit=5&cursor=page-2') {
+      attempts += 1
+      if (attempts === 1) return new Promise<Response>((resolve) => { finishNext = resolve })
+      return json({ items: makeEntries([6, 5, 4, 3, 2, 1]), has_more: false, next_cursor: null })
+    }
+    if (path === '/api/customers/7/ledger?limit=5') {
+      return json({ items: makeEntries([10, 9, 8, 7, 6]), has_more: true, next_cursor: 'page-2' })
+    }
+    return json({}, 404)
+  })
+  render(<App />)
+  await navigate('Customers')
+  fireEvent.click(await screen.findByRole('button', { name: /Ramesh Kumar/ }))
+  const sheet = within(screen.getByRole('dialog', { name: customer.name }))
+  fireEvent.click(await sheet.findByRole('button', { name: 'Load more' }))
+  expect((sheet.getByRole('button', { name: 'Loading…' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(sheet.getAllByRole('listitem')).toHaveLength(5)
+  await act(async () => finishNext(await json({}, 503)))
+  expect(sheet.getAllByRole('listitem')).toHaveLength(5)
+  fireEvent.click(await sheet.findByRole('button', { name: 'Try again' }))
+  await sheet.findByText('All transactions shown.')
+  expect(sheet.getAllByRole('listitem')).toHaveLength(10)
+  const order = sheet.getAllByRole('listitem').map((row) => row.querySelector('.history-amount strong')?.textContent)
+  expect(order).toEqual(['+₹10', '+₹9', '+₹8', '+₹7', '+₹6', '+₹5', '+₹4', '+₹3', '+₹2', '+₹1'])
+  expect(sheet.queryByRole('button', { name: 'Load more' })).toBeNull()
+  fireEvent.click(sheet.getByRole('button', { name: 'Close' }))
+  fireEvent.click(screen.getByRole('button', { name: /Sunita Devi/ }))
+  await within(screen.getByRole('dialog', { name: 'Sunita Devi' })).findByText('No transactions yet')
+  expect(screen.queryByText('+₹10')).toBeNull()
+})
+
+it('keeps both desktop lists interactive while their detail panels are open', async () => {
+  await i18n.changeLanguage('en-IN')
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
+  send.mockImplementation((path: string) => {
+    if (path === '/api/customers') return json([
+      { ...customer, balance_paise: 125000, last_transaction_at: timestamp },
+      { id: 8, name: 'Sunita Devi', balance_paise: 240000, last_transaction_at: timestamp },
+    ])
+    if (path === '/api/receipts') return json([receipt, { ...receipt, entry_id: 10, customer_name: 'Sunita Devi' }])
+    return json({ items: [], has_more: false, next_cursor: null })
+  })
+  render(<App />)
+  await navigate('Customers')
+  fireEvent.click(await screen.findByRole('button', { name: /Ramesh Kumar/ }))
+  expect(screen.getByRole('region', { name: 'Ramesh Kumar' })).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /Sunita Devi/ }))
+  expect(screen.getByRole('region', { name: 'Sunita Devi' })).toBeTruthy()
+  expect(screen.queryByRole('dialog')).toBeNull()
+  await navigate('Receipts')
+  fireEvent.click(await screen.findByRole('button', { name: /Ramesh Kumar/ }))
+  const panel = within(screen.getByRole('region', { name: 'Receipt preview' }))
+  expect(panel.getByText('Ramesh Kumar')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /Sunita Devi/ }))
+  const nextPanel = within(screen.getByRole('region', { name: 'Receipt preview' }))
+  expect(nextPanel.getByText('Sunita Devi')).toBeTruthy()
+  expect(screen.queryByRole('dialog')).toBeNull()
 })
 
 it('handles recording and preview, cancels without writing, and posts only after Confirm', async () => {
