@@ -9,6 +9,7 @@ export function useRecognition(onTranscript: (text: string, locale: Locale) => v
   const active = useRef<SpeechRecognition | null>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [error, setError] = useState<RecognitionError>()
+  const [interim, setInterim] = useState('')
   const Recognition = recognitionConstructor()
 
   useEffect(() => () => {
@@ -23,11 +24,13 @@ export function useRecognition(onTranscript: (text: string, locale: Locale) => v
     recognition?.abort()
     setStatus('idle')
     setError(undefined)
+    setInterim('')
   }
 
   function start(locale: Locale) {
     if (!Recognition || active.current) return
     setError(undefined)
+    setInterim('')
     setStatus('requesting')
     try {
       const recognition = configureRecognition(Recognition, locale)
@@ -41,7 +44,11 @@ export function useRecognition(onTranscript: (text: string, locale: Locale) => v
       }
       recognition.onresult = (event) => {
         const result = event.results[event.resultIndex]
-        if (active.current !== recognition || finished || !result?.isFinal) return
+        if (active.current !== recognition || finished || !result) return
+        if (!result.isFinal) {
+          setInterim(Array.from(event.results, (item) => item[0]?.transcript ?? '').join(''))
+          return
+        }
         const text = result[0].transcript
         if (!text.trim()) return
         finished = true
@@ -82,5 +89,5 @@ export function useRecognition(onTranscript: (text: string, locale: Locale) => v
     }
   }
 
-  return { supported: Boolean(Recognition), status, error, start, stop, cancel }
+  return { supported: Boolean(Recognition), status, error, interim, start, stop, cancel }
 }

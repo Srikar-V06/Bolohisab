@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, LoaderCircle, Mic, Square, X } from 'lucide-react'
+import { ArrowRight, Check, LoaderCircle, Mic, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError } from '../api'
-import type { ParseResult, PreviewBalance } from '../api'
-import { Loading, Sheet } from '../components'
-import { money } from '../format'
+import type { Customer, ParseResult, PreviewBalance } from '../api'
+import { Loading, Sheet, useLoad } from '../components'
+import { money, transactionDate } from '../format'
 import LanguageSelect from '../localization/LanguageSelect'
 import { languageNames, readLanguage, saveLanguage, speechLocales } from '../localization/languages'
 import type { Locale } from '../localization/languages'
@@ -15,22 +15,50 @@ type Review =
   | { state: 'parsing' | 'parseFailed' | 'precision'; transcript: Transcript }
   | { state: 'preview' | 'saving' | 'saved' | 'stale' | 'saveFailed'; transcript: Transcript; result: ParseResult; batchId: string }
 
+function KhataStrip({ customers, language }: { customers: Customer[]; language: Locale }) {
+  const { t } = useTranslation()
+  const owing = customers.filter(({ balance_paise }) => balance_paise > 0)
+  const total = owing.reduce((sum, { balance_paise }) => sum + BigInt(balance_paise), 0n)
+  const latest = customers.reduce<Customer | undefined>((found, row) =>
+    row.last_transaction_at && (!found?.last_transaction_at || row.last_transaction_at > found.last_transaction_at) ? row : found, undefined)
+
+  return (
+    <a className="khata-strip" href="#customers" aria-label={t('customerList.total')}>
+      <span className="khata-figure">
+        <span className="subtle">{t('customerList.total')}</span>
+        <strong className="khata-total">{money(total)}</strong>
+      </span>
+      <span className="khata-meta">
+        <span className="status-chip amber">{t('customerList.count', { count: owing.length })}</span>
+        {latest?.last_transaction_at && (
+          <span className="subtle">{t('speak.lastEntry', { name: latest.name, time: transactionDate(latest.last_transaction_at, language) })}</span>
+        )}
+      </span>
+    </a>
+  )
+}
+
 function BalanceCard({ balance, queryOnly }: { balance: PreviewBalance; queryOnly: boolean }) {
   const { t } = useTranslation()
   return (
     <section className="preview-card card">
       <h3>{balance.customer.name}</h3>
-      <dl>
-        {!queryOnly && <>
-          <div className="info-row"><dt>{t('speak.credit')}</dt><dd className="red">{money(balance.credit_paise)}</dd></div>
-          <div className="info-row"><dt>{t('speak.payment')}</dt><dd className="green">{money(balance.payment_paise)}</dd></div>
-          <div className="info-row"><dt>{t('speak.previous')}</dt><dd>{money(balance.previous_balance_paise)}</dd></div>
-        </>}
-        <div className="info-row current-total">
-          <dt>{t(queryOnly ? 'speak.balanceQuery' : 'speak.updated')}</dt>
-          <dd>{money(balance.updated_balance_paise)}</dd>
+      {queryOnly ? (
+        <div className="balance-now">
+          <span className="subtle">{t('speak.balanceQuery')}</span>
+          <strong>{money(balance.updated_balance_paise)}</strong>
         </div>
-      </dl>
+      ) : <>
+        <ul className="action-rows">
+          {balance.credit_paise > 0 && <li><span>{t('speak.credit')}</span><strong className="red">{money(balance.credit_paise)}</strong></li>}
+          {balance.payment_paise > 0 && <li><span>{t('speak.payment')}</span><strong className="green">{money(balance.payment_paise)}</strong></li>}
+        </ul>
+        <div className="balance-flow">
+          <span><span className="subtle">{t('speak.previous')}</span><strong>{money(balance.previous_balance_paise)}</strong></span>
+          <ArrowRight size={18} aria-hidden="true" className="text-muted" />
+          <span><span className="subtle">{t('speak.updated')}</span><strong>{money(balance.updated_balance_paise)}</strong></span>
+        </div>
+      </>}
     </section>
   )
 }
@@ -43,6 +71,7 @@ export default function VoiceEntry({ language }: { language: Locale }) {
   const parsing = useRef<AbortController>(null)
   const saving = useRef(false)
   const capture = useRecognition((text, locale) => void parse({ text, locale }))
+  const { data: customers, retry: reloadCustomers } = useLoad(api.customers)
 
   useEffect(() => () => parsing.current?.abort(), [])
 
@@ -66,6 +95,7 @@ export default function VoiceEntry({ language }: { language: Locale }) {
   function closeReview() {
     parsing.current?.abort()
     capture.cancel()
+    if (review?.state === 'saved') reloadCustomers()
     setReview(undefined)
   }
 
@@ -92,22 +122,35 @@ export default function VoiceEntry({ language }: { language: Locale }) {
 
   return (
     <div className="speak-page">
-      <p className="speak-greeting">{t('speak.greeting')}</p>
-      <button type="button" className="mic-control" aria-label={micLabel} onClick={micAction} disabled={!capture.supported}
-        data-recording={status === 'recording'}>
-        {status === 'recording' ? <Square size={38} aria-hidden="true" />
-          : status === 'requesting' || status === 'processing' ? <LoaderCircle size={44} className="spinner" aria-hidden="true" />
-            : <Mic size={53} strokeWidth={2} aria-hidden="true" />}
-      </button>
+      {Array.isArray(customers) && customers.length > 0
+        ? <KhataStrip customers={customers} language={language} />
+        : <p className="speak-greeting">{t('speak.greeting')}</p>}
+      <div className="mic-stage" data-state={status}>
+        <span className="mic-ring" aria-hidden="true" />
+        <span className="mic-ring mic-ring-late" aria-hidden="true" />
+        <button type="button" className="mic-control" aria-label={micLabel} onClick={micAction} disabled={!capture.supported}
+          data-recording={status === 'recording'}>
+          {status === 'recording' ? <Square size={34} fill="currentColor" aria-hidden="true" />
+            : status === 'requesting' || status === 'processing' ? <LoaderCircle size={44} className="spinner" aria-hidden="true" />
+              : <Mic size={52} strokeWidth={2} aria-hidden="true" />}
+        </button>
+      </div>
       <h1>{t('speak.instruction')}</h1>
       {status === 'idle' ? <p className="speak-support">{t('speak.support')}</p>
-        : <p className="speak-support green" role="status">
+        : <p className="speak-status" role="status">
+          {status === 'recording' && <span className="listen-bars" aria-hidden="true"><span /><span /><span /><span /><span /></span>}
           {t(status === 'requesting' ? 'speak.permission' : status === 'recording' ? 'speak.recording' : 'speak.finishing')}
         </p>}
-      <div className="example-card card">
-        <p>{t('speak.exampleLabel')}</p>
-        <blockquote>“{t('speak.example')}”</blockquote>
-      </div>
+      {status === 'idle' ? (
+        <div className="example-card card">
+          <p>{t('speak.exampleLabel')}</p>
+          <blockquote>“{t('speak.example')}”</blockquote>
+        </div>
+      ) : (
+        <p className="live-transcript" lang={speechLanguage} aria-live="polite" data-empty={!capture.interim}>
+          {capture.interim}
+        </p>
+      )}
       {!capture.supported && <p className="notice" role="status">{t('speak.unsupported')}</p>}
       {capture.error && <p className="notice notice-error" role="alert">{t(capture.error)}</p>}
       <button type="button" className="speech-setting" onClick={() => setSettings(true)} disabled={status !== 'idle'}>
@@ -126,16 +169,16 @@ export default function VoiceEntry({ language }: { language: Locale }) {
         close={closeReview} locked={review.state === 'saving'}>
         {review.state === 'saved' ? (
           <div className="saved-state">
-            <Check size={34} aria-hidden="true" />
+            <span className="saved-mark"><Check size={36} strokeWidth={2.5} aria-hidden="true" /></span>
             <p role="status">{t('speak.savedDetail')}</p>
             <button className="button button-primary" type="button" onClick={closeReview}>{t('common.done')}</button>
           </div>
         ) : (
           <>
-            <div className="transcript-card card">
+            <div className="transcript-card">
               <p className="label">{t('speak.original')}</p>
               <blockquote lang={result?.detected_language ?? review.transcript.locale}>{review.transcript.text}</blockquote>
-              {result && <p className="subtle">{t('speak.detected')} · {t(
+              {result && <p className="subtle">{t('speak.detected')}: {t(
                 result.detected_language ? `detected.${result.detected_language}` : 'speak.unknown',
               )}</p>}
             </div>
@@ -155,14 +198,14 @@ export default function VoiceEntry({ language }: { language: Locale }) {
                 )}
               </div>
             )}
+            {result?.balances.map((balance) => <BalanceCard key={balance.customer.id} balance={balance}
+              queryOnly={!result.actions.some((action) => action.customer.id === balance.customer.id && action.intent !== 'BALANCE_QUERY')} />)}
             {result?.english_interpretation && (
               <details className="interpretation card">
                 <summary>{t('speak.interpretation')}</summary>
                 <p lang="en-IN">{result.english_interpretation}</p>
               </details>
             )}
-            {result?.balances.map((balance) => <BalanceCard key={balance.customer.id} balance={balance}
-              queryOnly={!result.actions.some((action) => action.customer.id === balance.customer.id && action.intent !== 'BALANCE_QUERY')} />)}
             {review.state === 'stale' && <p className="notice notice-error" role="alert">{t('speak.stale')}</p>}
             {review.state === 'saveFailed' && <p className="notice notice-error" role="alert">{t('speak.saveFailed')}</p>}
             {result?.status === 'REVIEW_REQUIRED' && !queryOnly && review.state === 'preview' &&
@@ -178,6 +221,7 @@ export default function VoiceEntry({ language }: { language: Locale }) {
                   onClick={() => { closeReview(); capture.start(speechLanguage) }}>{t('clarify.recordAgain')}</button>
               ) : result?.status === 'REVIEW_REQUIRED' && !queryOnly && (
                 <button className="button button-primary" type="button" disabled={review.state === 'saving'} onClick={() => void confirm()}>
+                  {review.state === 'saving' ? <LoaderCircle size={17} className="spinner" aria-hidden="true" /> : <Check size={17} aria-hidden="true" />}
                   {t(review.state === 'saving' ? 'speak.saving' : 'common.confirm')}
                 </button>
               )}

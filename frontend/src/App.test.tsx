@@ -36,6 +36,9 @@ class FakeRecognition {
   start() { FakeRecognition.current = this }
   stop() {}
   abort() {}
+  partial(text: string) {
+    this.onresult?.({ resultIndex: 0, results: [{ 0: { transcript: text }, isFinal: false }] })
+  }
   deliver(text: string) {
     this.onresult?.({ resultIndex: 0, results: [{ 0: { transcript: text }, isFinal: true }] })
     this.onend?.()
@@ -122,6 +125,8 @@ it('handles recording and preview, cancels without writing, and posts only after
     expect(FakeRecognition.current.lang).toBe('hi-IN')
     act(() => FakeRecognition.current.onstart?.())
     expect(screen.getByText('Listening…')).toBeTruthy()
+    act(() => FakeRecognition.current.partial('Ramesh ke khate'))
+    expect(screen.getByText('Ramesh ke khate')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }))
     expect(screen.getByText('Processing your recording…')).toBeTruthy()
     act(() => FakeRecognition.current.deliver(transcript))
@@ -135,7 +140,7 @@ it('handles recording and preview, cancels without writing, and posts only after
   expect(within(sheet).getByText('₹1,250')).toBeTruthy()
   expect(sheet.querySelector('blockquote')?.textContent).toBe(transcript)
   fireEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }))
-  expect(send.mock.calls.map(([path]) => path)).toEqual(['/api/voice/parse'])
+  expect(send.mock.calls.map(([path]) => path).filter((path) => path !== '/api/customers')).toEqual(['/api/voice/parse'])
   await record()
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
   await screen.findByRole('heading', { name: 'Transaction saved' })
