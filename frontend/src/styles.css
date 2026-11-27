@@ -2,26 +2,52 @@
 
 @theme {
   --font-sans: "Inter Variable", "Noto Sans Devanagari Variable", system-ui, sans-serif;
-  --color-primary: #176b4d;
-  --color-surface: #f7f8f5;
-  --color-ink: #17231c;
-  --color-muted: #6b756e;
-  --color-line: #e4e9e4;
+  --font-display: "Baloo 2 Variable", "Noto Sans Devanagari Variable", system-ui, sans-serif;
+  --text-xs: .8125rem;
+  --text-xs--line-height: 1.45;
+  --color-primary: #0f5c41;
+  --color-primary-hover: #0b4a34;
+  --color-surface: #f4f6f3;
+  --color-card: #ffffff;
+  --color-ink: #15211a;
+  --color-muted: #56625a;
+  --color-line: #dde4de;
 }
 
 @layer base {
   :root {
     --app-width: 27rem;
-    --nav-height: 4.5rem;
-    --dues: #b41622;
+    --content-width: 44rem;
+    --sidebar-width: 16.5rem;
+    --nav-height: 4.25rem;
+    --nav-inset: .75rem;
+    --dues: #b3261e;
     --green: #146348;
-    --mint: #e4f2eb;
-    --amber: #fff0c6;
-    --amber-ink: #805006;
+    --mint: #e3f1e9;
+    --amber: #fcefc7;
+    --amber-ink: #7a4a00;
+    --shadow-float: 0 10px 30px -8px rgb(21 33 26 / .22), 0 2px 6px rgb(21 33 26 / .06);
+    --ease-out: cubic-bezier(.2, .8, .2, 1);
+    --dur-fast: 140ms;
+    --dur: 220ms;
+    --dur-slow: 320ms;
   }
 
   body {
     @apply min-w-0 bg-surface font-sans text-ink antialiased;
+  }
+
+  h1, h2, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -.01em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
   }
 
   body:has(dialog[open]) {
@@ -58,19 +84,23 @@
   }
 
   .app-header h1 {
-    @apply text-[1.375rem] leading-snug font-bold;
+    @apply text-[1.75rem] leading-tight font-bold;
   }
 
   .brand {
-    @apply flex min-w-0 items-center gap-2 text-base leading-tight font-bold;
+    @apply flex min-w-0 items-center gap-2.5 leading-tight;
+  }
+
+  .brand-name {
+    @apply font-display text-xl leading-none font-bold text-ink;
   }
 
   .brand-mark {
-    @apply grid size-9 shrink-0 place-items-center rounded-[.7rem] bg-primary text-white;
+    @apply grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-white;
   }
 
   .tagline {
-    @apply mt-0.5 text-[.625rem] leading-snug font-medium text-muted;
+    @apply mt-1 text-xs leading-snug font-medium text-muted;
   }
 
   .language-select {
@@ -79,7 +109,11 @@
 
   .page-content {
     @apply min-w-0 px-4;
-    padding-bottom: calc(var(--nav-height) + 1rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--nav-height) + var(--nav-inset) + 1.5rem + env(safe-area-inset-bottom));
+  }
+
+  .page-enter {
+    animation: page-enter var(--dur) var(--ease-out) both;
   }
 
   .page-content:focus {
@@ -91,26 +125,74 @@
   }
 
   .bottom-nav {
-    @apply fixed inset-x-0 bottom-0 z-20 mx-auto grid grid-cols-3 border-t border-line bg-white px-2;
-    width: min(100%, var(--app-width));
-    min-height: calc(var(--nav-height) + env(safe-area-inset-bottom));
-    padding-bottom: env(safe-area-inset-bottom);
+    @apply fixed inset-x-0 z-20 mx-auto rounded-[1.375rem] border border-line bg-card p-1.5;
+    bottom: calc(var(--nav-inset) + env(safe-area-inset-bottom));
+    width: min(calc(100% - 2 * var(--nav-inset)), calc(var(--app-width) - 2 * var(--nav-inset)));
+    box-shadow: var(--shadow-float);
   }
 
-  .bottom-nav a {
-    @apply flex min-h-13 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-center text-xs font-medium text-muted;
+  .nav-brand {
+    display: none;
   }
 
-  .bottom-nav a[aria-current="page"] {
-    @apply font-bold text-primary;
+  .nav-links {
+    @apply grid grid-cols-3 gap-1;
+  }
+
+  .nav-links a {
+    @apply flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-center text-xs font-semibold text-muted;
+    transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+  }
+
+  .nav-links a:hover {
+    @apply bg-surface text-ink;
+  }
+
+  .nav-links a[aria-current="page"] {
+    @apply bg-primary text-white;
   }
 
   .nav-icon {
-    @apply grid h-7 w-13 place-items-center rounded-full;
+    @apply grid size-6 place-items-center;
   }
 
-  .bottom-nav a[aria-current="page"] .nav-icon {
-    background: var(--mint);
+  @media (min-width: 64rem) {
+    .app-shell {
+      width: auto;
+      max-width: calc(var(--sidebar-width) + var(--content-width) + 6rem);
+      padding-left: calc(var(--sidebar-width) + 2rem);
+      padding-right: 2rem;
+    }
+
+    .app-header {
+      @apply min-h-20 px-0 pt-6;
+    }
+
+    .app-header .brand {
+      visibility: hidden;
+    }
+
+    .page-content {
+      @apply px-0 pb-12;
+    }
+
+    .bottom-nav {
+      @apply inset-y-4 left-4 right-auto m-0 flex flex-col gap-6 rounded-3xl p-3;
+      width: var(--sidebar-width);
+      bottom: 1rem;
+    }
+
+    .nav-brand {
+      @apply flex px-2 pt-2;
+    }
+
+    .nav-links {
+      @apply flex flex-col;
+    }
+
+    .nav-links a {
+      @apply min-h-12 flex-row justify-start gap-3 px-3 text-left text-[.9375rem];
+    }
   }
 
   .speak-page {
@@ -298,15 +380,20 @@
   }
 
   .button {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3.5 py-2 text-sm leading-snug font-semibold;
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-5 py-2 text-base leading-snug font-semibold;
+    transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+  }
+
+  .button:active:not(:disabled) {
+    transform: scale(.98);
   }
 
   .button-primary {
-    @apply border-primary bg-primary text-white hover:bg-[#115b42];
+    @apply border-primary bg-primary text-white hover:border-primary-hover hover:bg-primary-hover;
   }
 
   .button-secondary {
-    @apply border-line bg-white text-primary hover:bg-surface;
+    @apply border-line bg-card text-ink hover:border-primary/40 hover:bg-surface;
   }
 
   .sheet {
@@ -314,15 +401,51 @@
     inset: auto 0 0;
     width: min(100%, var(--app-width));
     max-width: none;
-    max-height: min(84dvh, 46rem);
+    max-height: min(88dvh, 46rem);
     margin: 0 auto;
     overflow: auto;
     overscroll-behavior: contain;
-    @apply rounded-t-3xl border border-line bg-surface text-ink;
+    box-shadow: var(--shadow-float);
+    @apply rounded-t-[1.75rem] border border-line bg-surface text-ink;
+  }
+
+  .sheet[open] {
+    animation: sheet-up var(--dur-slow) var(--ease-out) both;
   }
 
   .sheet::backdrop {
-    background: #17231c65;
+    background: rgb(21 33 26 / .42);
+  }
+
+  .sheet[open]::backdrop {
+    animation: fade-in var(--dur-slow) var(--ease-out) both;
+  }
+
+  .sheet-body {
+    position: relative;
+  }
+
+  .sheet-body::before {
+    content: "";
+    @apply absolute top-2 left-1/2 z-20 h-1 w-10 -translate-x-1/2 rounded-full bg-line;
+  }
+
+  @media (min-width: 64rem) {
+    .sheet {
+      inset: 1rem 1rem 1rem auto;
+      width: 28rem;
+      max-height: none;
+      height: auto;
+      @apply rounded-3xl;
+    }
+
+    .sheet[open] {
+      animation-name: sheet-in-right;
+    }
+
+    .sheet-body::before {
+      display: none;
+    }
   }
 
   .sheet-header {
@@ -330,7 +453,7 @@
   }
 
   .sheet-header h2 {
-    @apply min-w-0 text-lg leading-relaxed font-bold;
+    @apply min-w-0 text-[1.375rem] leading-snug font-bold;
     overflow-wrap: anywhere;
   }
 
@@ -404,4 +527,38 @@
   .spinner {
     @apply animate-spin motion-reduce:animate-none;
   }
+
+  .skeleton-list {
+    @apply mt-1 grid gap-2;
+  }
+
+  .skeleton-row {
+    @apply grid min-h-18 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-line bg-card px-3;
+  }
+
+  .skeleton-block {
+    @apply block rounded-full;
+    background: linear-gradient(90deg, #e9eee9 0%, #f4f7f4 50%, #e9eee9 100%) 0 0 / 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+}
+
+@keyframes sheet-in-right {
+  from { opacity: 0; transform: translateX(2rem); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
 }

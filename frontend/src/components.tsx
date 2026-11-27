@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { LoaderCircle, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from './api'
 
@@ -47,8 +47,24 @@ export function useLoad<T>(load: (signal: AbortSignal) => Promise<T>) {
   return { data, error, setData, retry: () => setRevision((value) => value + 1) }
 }
 
-export function Loading({ text }: { text: string }) {
-  return <p className="notice" role="status"><LoaderCircle size={18} className="spinner" aria-hidden="true" /> {text}</p>
+export function Loading({ text, rows = 4 }: { text: string; rows?: number }) {
+  return (
+    <div role="status">
+      <span className="sr-only">{text}</span>
+      <ul className="skeleton-list" aria-hidden="true">
+        {Array.from({ length: rows }, (_, index) => (
+          <li key={index} className="skeleton-row">
+            <span className="skeleton-block size-10" />
+            <span className="grid gap-2">
+              <span className="skeleton-block h-3.5 w-2/5" />
+              <span className="skeleton-block h-3 w-1/4" />
+            </span>
+            <span className="skeleton-block h-4 w-14" />
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 export function LoadError({ error, retry }: { error: unknown; retry: () => void }) {

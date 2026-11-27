@@ -141,7 +141,7 @@ export default function VoiceEntry({ language }: { language: Locale }) {
             </div>
             {review.state === 'parsing' && <>
               <p className="subtle">{t('speak.received')}</p>
-              <Loading text={t('speak.parsing')} />
+              <Loading text={t('speak.parsing')} rows={2} />
             </>}
             {(review.state === 'parseFailed' || review.state === 'precision') && (
               <p className="notice notice-error" role="alert">{t(review.state === 'precision' ? 'common.precision' : 'speak.parseFailed')}</p>
