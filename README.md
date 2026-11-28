@@ -80,7 +80,15 @@ For the Stitch reference data, run `docker compose exec backend python -m app.se
 
 ### Receipts
 
-The Receipts screen lists saved ledger entries. Awaiting includes entries that need a receipt and generated receipts ready to share. Sent shows receipts marked sent after native sharing or after the shopkeeper sends a copied link and selects Mark as sent. A recipient link displays a single receipt in the chosen language. The link must use a deployment the recipient can reach.
+The Receipts screen lists saved ledger entries. Awaiting contains entries without a generated receipt. Sent contains all generated receipts and shows whether each one is ready to share, sent, confirmed, or disputed. Use **Share receipt link** for the device's share menu or **Copy link** to send it yourself. After sending a copied link, select **Mark as sent**. Refresh receipts to see customer responses.
+
+Customers can read or listen to a shared receipt in Hindi or English, confirm the transaction, or submit the amount they believe is correct and a reason. Review a correction in the transaction's receipt preview. Enter your name to record who made the decision. The current local shopkeeper workspace records the name entered on the form. Accepting a request appends a signed adjustment linked to the original ledger entry. For example, accepting a ₹300 claim on a ₹200 payment appends a −₹100 adjustment and reduces outstanding by ₹100. The original payment and its receipt stay intact.
+
+### Customer receipt links
+
+The default Docker setup binds the shopkeeper app to localhost on port 3000 and a receipt-only listener to localhost on port 3011. For customers to receive working links, configure `PUBLIC_RECEIPT_ORIGIN` to the HTTPS origin they can reach and proxy that origin to the receipt-only listener (port 3011, configurable with `BOLOHISAAB_RECEIPT_PORT`). Keep the shopkeeper listener and backend private. Leave access logging for token URLs disabled at any reverse proxy. The recipient link serves one receipt and only allows confirmation or discrepancy submission for that receipt.
+
+To test both listeners on the same computer, set `PUBLIC_RECEIPT_ORIGIN=http://127.0.0.1:3011` before running Docker Compose. Without a configured origin, generated links use the local app's address.
 
 ## Run locally without Docker
 

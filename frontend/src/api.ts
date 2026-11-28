@@ -45,14 +45,35 @@ export type ParseResult = {
   english_interpretation: string | null
   clarification: { code: ClarificationCode; candidates: CustomerIdentity[] } | null
 }
-export type Receipt = Omit<LedgerEntry, 'id'> & {
+export type ReceiptStatus = 'AWAITING' | 'GENERATED' | 'SENT' | 'CONFIRMED' | 'DISPUTED'
+export type DisputeDecision = 'APPROVED' | 'REJECTED'
+export type ReceiptDispute = {
+  id: number
+  claimed_amount_paise: number | string
+  adjustment_paise: number | string
+  reason: string
+  status: 'PENDING' | DisputeDecision
+  created_at: string
+  reviewed_by: string | null
+  reviewed_at: string | null
+  adjustment_entry_id: number | null
+}
+export type Receipt = Omit<LedgerEntry, 'id' | 'amount_paise'> & {
   entry_id: number
+  receipt_id: number | null
+  customer_id: number
   shop_name: string
   customer_name: string
-  balance_after_paise: number
+  amount_paise: number | string
+  balance_after_paise: number | string
   issued_at: string | null
   sent_at: string | null
+  confirmed_at: string | null
+  language: Locale | null
+  status: ReceiptStatus
   share_token: string | null
+  share_url: string | null
+  dispute: ReceiptDispute | null
 }
 
 export class ApiError extends Error {
@@ -103,4 +124,6 @@ export const api = {
   receipts: (signal?: AbortSignal) => request<Receipt[]>('/receipts', { signal }),
   generate: (id: number, language: Locale) => post<Receipt>(`/receipts/${id}`, { language }),
   markSent: (id: number) => post<Receipt>(`/receipts/${id}/sent`, {}),
+  reviewDispute: (id: number, decision: DisputeDecision, reviewer: string) =>
+    post<Receipt>('/receipts/' + id + '/dispute/review', { decision, reviewer }),
 }

@@ -32,7 +32,8 @@ export default function Dashboard({ customers, receipts, language, children }: {
     .slice(0, 3)
   const today = indiaDay.format(now)
   const todays = (receipts ?? []).filter(({ created_at }) => indiaDay.format(new Date(created_at)) === today)
-  const sum = (type: Receipt['type']) => todays.filter((row) => row.type === type).reduce((s, row) => s + row.amount_paise, 0)
+  const sum = (type: Receipt['type']) => todays.filter((row) => row.type === type)
+    .reduce((total, row) => total + BigInt(row.amount_paise), 0n)
 
   return (
     <div className="dashboard">

@@ -109,8 +109,11 @@
     "tabs": "Receipt status",
     "pending": "Receipt due",
     "ready": "Ready to share",
+    "confirmed": "Confirmed",
+    "disputed": "Disputed",
+    "refresh": "Refresh receipts",
     "emptyAwaiting": "No receipts to prepare.",
-    "emptySent": "No receipts sent yet.",
+    "emptySent": "No receipts generated yet.",
     "preview": "Receipt preview",
     "shop": "Shop name",
     "customer": "Customer",
@@ -125,12 +128,34 @@
     "listen": "Listen to receipt",
     "stop": "Stop playback",
     "share": "Share receipt link",
+    "copyLink": "Copy link",
     "markSent": "Mark as sent",
     "copied": "Link copied. After sending it to the customer, mark the receipt as sent.",
+    "linkCopied": "Receipt link copied.",
     "manualCopy": "Copy this link to share the receipt.",
     "shared": "Receipt marked as sent.",
     "actionFailed": "Couldn’t update the receipt. Please try again.",
-    "shareFailed": "Couldn’t share this link. You can copy it below."
+    "shareFailed": "Couldn’t share this link. You can copy it below.",
+    "dispute": {
+      "title": "Correction request",
+      "claim": "Customer’s claimed amount",
+      "reason": "Reason",
+      "requestedAt": "Requested on",
+      "adjustment": "Change to outstanding balance if accepted",
+      "reviewer": "Your name for the review record",
+      "reviewedBy": "Reviewed by",
+      "adjustmentId": "Adjustment transaction ID",
+      "approve": "Accept correction",
+      "reject": "Reject correction",
+      "approved": "Correction accepted. An adjustment was added to the ledger.",
+      "rejected": "Correction rejected.",
+      "reviewFailed": "Couldn’t save the decision. Refresh receipts and try again.",
+      "status": {
+        "PENDING": "Needs review",
+        "APPROVED": "Accepted",
+        "REJECTED": "Rejected"
+      }
+    }
   },
   "meta": {
     "description": "BoloHisaab, a voice-first digital khata for kirana shops."

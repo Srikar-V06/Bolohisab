@@ -3,6 +3,7 @@ services:
     build: ./backend
     environment:
       DATABASE_PATH: /data/bolohisaab.sqlite3
+      PUBLIC_RECEIPT_ORIGIN: ${PUBLIC_RECEIPT_ORIGIN:-}
     volumes:
       - sqlite_data:/data
     healthcheck:
@@ -16,6 +17,7 @@ services:
     build: ./frontend
     ports:
       - "127.0.0.1:${BOLOHISAAB_PORT:-3000}:80"
+      - "127.0.0.1:${BOLOHISAAB_RECEIPT_PORT:-3011}:81"
     depends_on:
       backend:
         condition: service_healthy

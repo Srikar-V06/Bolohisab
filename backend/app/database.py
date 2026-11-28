@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_SHOP_ID = 1
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def database_path() -> Path:
@@ -51,7 +51,9 @@ def initialize_database(path: Path) -> None:
             connection.executescript(Path(__file__).with_name("receipts_migration.sql").read_text(encoding="utf-8"))
         if version < 3:
             connection.executescript(Path(__file__).with_name("ledger_pagination_migration.sql").read_text(encoding="utf-8"))
-            connection.execute("PRAGMA user_version = 3")
+        if version < 4:
+            connection.executescript(Path(__file__).with_name("receipt_lifecycle_migration.sql").read_text(encoding="utf-8"))
+            connection.execute("PRAGMA user_version = 4")
 
 
 def check_database(path: Path) -> None:

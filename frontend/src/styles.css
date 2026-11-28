@@ -802,7 +802,45 @@
   }
 
   .receipt-actions .button {
-    @apply grow px-3;
+    @apply min-w-0 grow px-3;
+  }
+
+  .receipt-day .list-amount {
+    @apply max-w-32;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-day .status-chip {
+    @apply whitespace-normal;
+  }
+
+  .receipt-toolbar {
+    @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2;
+  }
+
+  .receipt-dispute {
+    @apply rounded-xl border border-line bg-card;
+    overflow-wrap: anywhere;
+  }
+
+  .receipt-dispute summary {
+    @apply min-h-11 cursor-pointer px-3 py-3 font-semibold;
+  }
+
+  .receipt-dispute summary .status-chip {
+    @apply ms-2;
+  }
+
+  .receipt-dispute-content {
+    @apply grid gap-3 border-t border-line px-3 py-3;
+  }
+
+  .receipt-review-form {
+    @apply grid gap-2 text-sm;
+  }
+
+  .receipt-review-form input {
+    @apply min-h-11 w-full min-w-0 rounded-xl border border-line bg-white px-3;
   }
 
   .receipt-tabs {

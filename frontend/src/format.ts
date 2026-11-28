@@ -4,7 +4,7 @@ import type { Locale } from './localization/languages'
 
 const rupees = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 })
 
-export function money(paise: number | bigint) {
+export function money(paise: number | bigint | string) {
   const value = BigInt(paise)
   const absolute = value < 0n ? -value : value
   const fraction = absolute % 100n
@@ -15,6 +15,12 @@ export function money(paise: number | bigint) {
 export function transactionDate(value: string, language: Locale) {
   return new Intl.DateTimeFormat(language, {
     timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+  }).format(new Date(value))
+}
+
+export function receiptDate(value: string, language: Locale) {
+  return new Intl.DateTimeFormat(language, {
+    timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short',
   }).format(new Date(value))
 }
 

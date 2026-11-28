@@ -12,6 +12,12 @@ const receipt = {
   entry_id: entry.id, shop_name: 'Kirana Shop', customer_name: customer.name,
   type: entry.type, amount_paise: entry.amount_paise, created_at: entry.created_at,
   payment_method: null, balance_after_paise: 125000, issued_at: null, sent_at: null, share_token: null,
+  status: 'AWAITING', receipt_id: null, customer_id: customer.id, dispute: null, language: null,
+}
+const issuedReceipt = {
+  ...receipt, receipt_id: 1, issued_at: timestamp, share_token: 'test-token',
+  share_url: 'https://receipts.example.com/api/receipts/share/test-token',
+  language: 'en-IN', status: 'GENERATED',
 }
 const preview = {
   original_transcript: transcript, status: 'REVIEW_REQUIRED', detected_language: 'hi-Latn-IN',
@@ -282,8 +288,8 @@ it('shows confirmed receipt rows, previews the balance, and separates generation
   window.localStorage.setItem('bolohisaab.receipt-language', 'en-IN')
   send.mockImplementation((path) => {
     if (path === '/api/receipts') return json([receipt])
-    if (path === '/api/receipts/9') return json({ ...receipt, issued_at: timestamp, share_token: 'test-token' })
-    return json({ ...receipt, issued_at: timestamp, share_token: 'test-token', sent_at: timestamp })
+    if (path === '/api/receipts/9') return json(issuedReceipt)
+    return json({ ...issuedReceipt, sent_at: timestamp, status: 'SENT' })
   })
   render(<App />)
   await navigate('Receipts')
@@ -294,13 +300,93 @@ it('shows confirmed receipt rows, previews the balance, and separates generation
   expect(within(sheet).getByText('₹1,250')).toBeTruthy()
   fireEvent.click(within(sheet).getByRole('button', { name: 'Generate receipt' }))
   await within(sheet).findByRole('button', { name: 'Share receipt link' })
-  fireEvent.click(within(sheet).getByRole('button', { name: 'Share receipt link' }))
-  await within(sheet).findByRole('textbox', { name: 'Share receipt link' })
+  expect(screen.getByRole('button', { name: 'Sent' }).getAttribute('aria-pressed')).toBe('true')
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Copy link' }))
+  const link = await within(sheet).findByRole<HTMLInputElement>('textbox', { name: 'Share receipt link' })
+  expect(link.value).toBe(issuedReceipt.share_url + '?language=en-IN')
   expect(send.mock.calls.map(([path]) => path)).not.toContain('/api/receipts/9/sent')
   fireEvent.click(within(sheet).getByRole('button', { name: 'Mark as sent' }))
   await within(sheet).findByText('Receipt marked as sent.')
   fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }))
   fireEvent.click(screen.getByRole('button', { name: 'Sent' }))
   expect(screen.getByRole('button', { name: /Ramesh Kumar/ })).toBeTruthy()
+  expect(window.location.hash).toBe('#receipts')
+})
+
+it('uses browser voice and native sharing with clipboard fallback', async () => {
+  await i18n.changeLanguage('en-IN')
+  const speak = vi.fn()
+  const share = vi.fn().mockRejectedValueOnce(new DOMException('Unavailable', 'NotAllowedError'))
+    .mockResolvedValueOnce(undefined)
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('speechSynthesis', { getVoices: () => [{ lang: 'hi-IN' }, { lang: 'en-IN' }], speak, cancel: vi.fn() })
+  vi.stubGlobal('SpeechSynthesisUtterance', class {
+    constructor(readonly text: string) {}
+  })
+  vi.stubGlobal('navigator', { share, clipboard: { writeText } })
+  send.mockImplementation((path) => path === '/api/receipts'
+    ? json([issuedReceipt]) : json({ ...issuedReceipt, status: 'SENT', sent_at: timestamp }))
+  render(<App />)
+  await navigate('Receipts')
+  fireEvent.click(screen.getByRole('button', { name: 'Sent' }))
+  fireEvent.click(await screen.findByRole('button', { name: /Ramesh Kumar/ }))
+  const sheet = within(screen.getByRole('dialog', { name: 'Receipt preview' }))
+  fireEvent.change(sheet.getByRole('combobox', { name: 'Receipt language' }), { target: { value: 'hi-IN' } })
+  fireEvent.click(sheet.getByRole('button', { name: 'Listen to receipt' }))
+  expect(speak).toHaveBeenCalledWith(expect.objectContaining({
+    lang: 'hi-IN', text: expect.stringContaining('Ramesh Kumar'),
+  }))
+  fireEvent.click(sheet.getByRole('button', { name: 'Stop playback' }))
+  fireEvent.click(sheet.getByRole('button', { name: 'Share receipt link' }))
+  await sheet.findByText(/Link copied/)
+  const link = issuedReceipt.share_url + '?language=hi-IN'
+  expect(writeText).toHaveBeenCalledWith(link)
+  expect(send.mock.calls.map(([path]) => path)).not.toContain('/api/receipts/9/sent')
+  fireEvent.click(sheet.getByRole('button', { name: 'Share receipt link' }))
+  await sheet.findByText('Receipt marked as sent.')
+  expect(share).toHaveBeenLastCalledWith({ title: 'रसीद देखें', url: link })
+})
+
+it.each([
+  ['APPROVED', 'Accept correction', 'Correction accepted. An adjustment was added to the ledger.'],
+  ['REJECTED', 'Reject correction', 'Correction rejected.'],
+] as const)('reviews a discrepancy as %s inside the receipt preview', async (decision, button, notice) => {
+  await i18n.changeLanguage('en-IN')
+  const item = {
+    ...issuedReceipt, type: 'PAYMENT', amount_paise: 20000, status: 'DISPUTED',
+    dispute: {
+      id: 7, claimed_amount_paise: 30000, adjustment_paise: -10000, reason: 'I paid ₹300.', status: 'PENDING',
+      created_at: timestamp, reviewed_at: null, reviewed_by: null, adjustment_entry_id: null,
+    },
+  }
+  const reviewed = { ...item, dispute: {
+    ...item.dispute, status: decision, reviewed_at: timestamp, reviewed_by: 'Shivani',
+    adjustment_entry_id: decision === 'APPROVED' ? 10 : null,
+  } }
+  let saved = false
+  send.mockImplementation((path) => {
+    if (path === '/api/receipts/9/dispute/review') {
+      saved = true
+      return json(reviewed)
+    }
+    return json(path === '/api/receipts' ? [saved ? reviewed : item] : [])
+  })
+  render(<App />)
+  await navigate('Receipts')
+  fireEvent.click(screen.getByRole('button', { name: 'Sent' }))
+  fireEvent.click(await screen.findByRole('button', { name: /Ramesh Kumar.*Disputed/ }))
+  const dialog = screen.getByRole('dialog', { name: 'Receipt preview' })
+  const sheet = within(dialog)
+  const section = dialog.querySelector('details')!
+  section.open = true
+  expect(sheet.getByText('−₹100')).toBeTruthy()
+  expect(sheet.getByText('I paid ₹300.')).toBeTruthy()
+  fireEvent.change(sheet.getByRole('textbox', { name: 'Your name for the review record' }), { target: { value: 'Shivani' } })
+  fireEvent.click(sheet.getByRole('button', { name: button }))
+  await sheet.findByText(notice)
+  expect(sheet.getByText(/Shivani/)).toBeTruthy()
+  expect(send.mock.calls).toContainEqual(['/api/receipts/9/dispute/review', expect.objectContaining({
+    body: JSON.stringify({ decision, reviewer: 'Shivani' }),
+  })])
   expect(window.location.hash).toBe('#receipts')
 })

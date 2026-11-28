@@ -1,20 +1,25 @@
-from datetime import datetime, timedelta, timezone
-from html import escape
+from dataclasses import asdict
+from os import environ
 from typing import Annotated
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, HTTPException, Path, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt, StringConstraints
 
 from .customers import CustomerId
 from .database import DEFAULT_SHOP_ID, database_transaction
 from .localization import LanguageCode
+from .public_receipt import render_shared_receipt
 from .receipt_store import (
-    ReceiptItem, ReceiptNotFound, generate_receipt, get_shared_receipt, list_receipt_items,
-    mark_receipt_sent,
+    DisputeDecision, ReceiptConflict, ReceiptItem, ReceiptNotFound, confirm_shared_receipt,
+    dispute_shared_receipt, generate_receipt, get_shared_receipt, list_receipt_items, mark_receipt_sent,
+    review_receipt_dispute,
 )
 
 router = APIRouter(prefix="/api/receipts", tags=["receipts"])
+ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+PaiseText = Annotated[str, StringConstraints(pattern=r"^-?(0|[1-9][0-9]{0,18})$")]
 
 
 class ReceiptLanguage(BaseModel):
@@ -22,72 +27,109 @@ class ReceiptLanguage(BaseModel):
     language: LanguageCode
 
 
+class DisputeClaim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claimed_amount_paise: StrictInt | PaiseText
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+
+
+class DisputeReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: DisputeDecision
+    reviewer: ShortText
+
+
+def public_receipt_origin() -> str:
+    origin = environ.get("PUBLIC_RECEIPT_ORIGIN", "").strip().rstrip("/")
+    if not origin:
+        return ""
+    url = urlsplit(origin)
+    if (url.scheme not in ("http", "https") or not url.hostname or url.username is not None
+        or url.path or url.query or url.fragment
+        or (url.scheme == "http" and url.hostname not in ("localhost", "127.0.0.1", "::1"))):
+        raise ValueError("PUBLIC_RECEIPT_ORIGIN must be an HTTPS origin or a local HTTP origin")
+    return origin
+
+
+def _receipt_payload(item: ReceiptItem, origin: str) -> dict:
+    data = asdict(item)
+    data["share_url"] = f"{origin}/api/receipts/share/{item.share_token}" if origin and item.share_token else None
+    for fields in (data, data["dispute"] or {}):
+        for field, value in fields.items():
+            # Keep the existing numeric API for safe values. A string carries larger paise exactly.
+            if field.endswith("_paise") and abs(value) > 2**53 - 1:
+                fields[field] = str(value)
+    return data
+
+
 @router.get("")
-def receipts(request: Request) -> list[ReceiptItem]:
+def receipts(request: Request) -> list[dict]:
     with database_transaction(request.app.state.database_path) as connection:
-        return list_receipt_items(connection, DEFAULT_SHOP_ID)
+        return [_receipt_payload(item, request.app.state.public_receipt_origin)
+                for item in list_receipt_items(connection, DEFAULT_SHOP_ID)]
 
 
 @router.post("/{entry_id}")
-def issue(entry_id: CustomerId, payload: ReceiptLanguage, request: Request) -> ReceiptItem:
+def issue(entry_id: CustomerId, payload: ReceiptLanguage, request: Request) -> dict:
     with database_transaction(request.app.state.database_path, write=True) as connection:
         try:
-            return generate_receipt(connection, DEFAULT_SHOP_ID, entry_id, payload.language)
+            item = generate_receipt(connection, DEFAULT_SHOP_ID, entry_id, payload.language)
         except ReceiptNotFound as error:
             raise HTTPException(404, "ENTRY_NOT_FOUND") from error
+        return _receipt_payload(item, request.app.state.public_receipt_origin)
 
 
 @router.post("/{entry_id}/sent")
-def sent(entry_id: CustomerId, request: Request) -> ReceiptItem:
+def sent(entry_id: CustomerId, request: Request) -> dict:
     with database_transaction(request.app.state.database_path, write=True) as connection:
         try:
-            return mark_receipt_sent(connection, DEFAULT_SHOP_ID, entry_id)
+            item = mark_receipt_sent(connection, DEFAULT_SHOP_ID, entry_id)
         except ReceiptNotFound as error:
             raise HTTPException(404, "RECEIPT_NOT_FOUND") from error
+        return _receipt_payload(item, request.app.state.public_receipt_origin)
 
 
-def _money(paise: int) -> str:
-    whole, fraction = divmod(abs(paise), 100)
-    amount = f"{whole}.{fraction:02d}" if fraction else str(whole)
-    return ("−" if paise < 0 else "") + "₹" + amount
+@router.post("/{entry_id}/dispute/review")
+def review(entry_id: CustomerId, payload: DisputeReview, request: Request) -> dict:
+    with database_transaction(request.app.state.database_path, write=True) as connection:
+        try:
+            item = review_receipt_dispute(connection, DEFAULT_SHOP_ID, entry_id, payload.decision, payload.reviewer)
+        except ReceiptNotFound as error:
+            raise HTTPException(404, "DISPUTE_NOT_FOUND") from error
+        except ReceiptConflict as error:
+            raise HTTPException(409, str(error)) from error
+        return _receipt_payload(item, request.app.state.public_receipt_origin)
 
 
 @router.get("/share/{token}", response_class=HTMLResponse)
-def shared(
-    token: Annotated[str, Path(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]+$")],
-    request: Request,
-    language: LanguageCode | None = None,
-) -> HTMLResponse:
+def shared(token: str, request: Request, language: LanguageCode | None = None) -> HTMLResponse:
     with database_transaction(request.app.state.database_path) as connection:
         try:
             item = get_shared_receipt(connection, token)
+        except ReceiptNotFound:
+            item = None
+    return render_shared_receipt(item, language)
+
+
+@router.post("/share/{token}/confirm", status_code=204, response_class=Response)
+def customer_confirm(token: str, request: Request) -> Response:
+    with database_transaction(request.app.state.database_path, write=True) as connection:
+        try:
+            confirm_shared_receipt(connection, token)
         except ReceiptNotFound as error:
             raise HTTPException(404, "RECEIPT_NOT_FOUND") from error
+        except ReceiptConflict as error:
+            raise HTTPException(409, str(error)) from error
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
-    locale = language or item.language or LanguageCode.HINDI
-    if locale == LanguageCode.HINDI:
-        title = "रसीद"
-        labels = ("ग्राहक", "लेन-देन आईडी", "तारीख़ और समय", "लेन-देन", "रकम", "लेन-देन के बाद बकाया")
-        kind = {"CREDIT": "उधार", "PAYMENT": "भुगतान", "ADJUSTMENT": "समायोजन"}[item.type]
-        method = {"CASH": "नकद", "UPI": "UPI"}.get(item.payment_method)
-    else:
-        title = "Receipt"
-        labels = ("Customer", "Transaction ID", "Date and time", "Transaction", "Amount", "Balance after transaction")
-        kind = {"CREDIT": "Credit", "PAYMENT": "Payment", "ADJUSTMENT": "Adjustment"}[item.type]
-        method = {"CASH": "Cash", "UPI": "UPI"}.get(item.payment_method)
-    if method:
-        kind = f"{kind} · {method}"
-    date = datetime.fromisoformat(item.created_at).astimezone(timezone(timedelta(hours=5, minutes=30), "IST"))
-    values = (item.customer_name, str(item.entry_id), date.strftime("%d/%m/%Y %H:%M IST"), kind,
-              _money(item.amount_paise), _money(item.balance_after_paise))
-    rows = "".join(f"<dt>{label}</dt><dd>{escape(value)}</dd>" for label, value in zip(labels, values, strict=True))
-    return HTMLResponse(
-        f"""<!doctype html><html lang="{locale}"><meta charset="utf-8">
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>{title} · BoloHisaab</title>
-        <style>body{{margin:0;padding:1rem;background:#f7f8f5;color:#17231c;font:1rem/1.6 system-ui,sans-serif}}
-        main{{max-width:26rem;margin:2rem auto;padding:1.5rem;background:#fff;border:1px solid #e4e9e4;border-radius:1rem}}
-        h1,dt{{color:#176b4d}}dt{{font-weight:600}}dd{{margin:0 0 .8rem;overflow-wrap:anywhere}}</style>
-        <main><h1>{title}</h1><p>{escape(item.shop_name)}</p><dl>{rows}</dl></main></html>""",
-        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"},
-    )
+
+@router.post("/share/{token}/dispute", status_code=204, response_class=Response)
+def customer_dispute(token: str, payload: DisputeClaim, request: Request) -> Response:
+    with database_transaction(request.app.state.database_path, write=True) as connection:
+        try:
+            dispute_shared_receipt(connection, token, int(payload.claimed_amount_paise), payload.reason)
+        except ReceiptNotFound as error:
+            raise HTTPException(404, "RECEIPT_NOT_FOUND") from error
+        except ReceiptConflict as error:
+            raise HTTPException(422 if str(error) == "INVALID_CLAIM" else 409, str(error)) from error
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})

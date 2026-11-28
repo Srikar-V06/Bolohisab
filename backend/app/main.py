@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from .customers import router as customer_router
 from .database import check_database, database_path as configured_database_path, initialize_database
 from .local_model import LocalModelAdapter, configured_model
-from .receipts import router as receipt_router
+from .receipts import public_receipt_origin, router as receipt_router
 from .voice import router as voice_router
 
 
@@ -27,6 +27,7 @@ def create_app(database_path: Path | None = None, local_model: LocalModelAdapter
     app = FastAPI(title="BoloHisaab API", version="0.1.0", lifespan=lifespan)
     app.state.database_path = path
     app.state.local_model = local_model
+    app.state.public_receipt_origin = public_receipt_origin()
     app.include_router(customer_router)
     app.include_router(voice_router)
     app.include_router(receipt_router)

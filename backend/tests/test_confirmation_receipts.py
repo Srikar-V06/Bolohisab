@@ -1,12 +1,15 @@
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from os import environ
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.database import DEFAULT_SHOP_ID, connect_database, database_transaction
-from app.ledger import LedgerEntryDraft, ledger_session
+from app.ledger import MAX_SQLITE_INTEGER, LedgerEntryDraft, ledger_session
 from app.main import create_app
 from app.seed_demo import seed_stitch_preview
 
@@ -69,12 +72,15 @@ class ConfirmationReceiptTest(unittest.TestCase):
 
     def test_receipt_generation_share_link_and_sent_status(self) -> None:
         endpoint = f"/api/receipts/{self.initial.id}"
+        self.assertEqual(self.client.get("/api/receipts").json()[0]["status"], "AWAITING")
         self.assertEqual(self.client.post("/api/receipts/99999", json={"language": "hi-IN"}).status_code, 404)
         self.assertEqual(self.client.post(endpoint + "/sent").status_code, 404)
         issued = self.client.post(endpoint, json={"language": "hi-IN"})
         self.assertEqual(issued.status_code, 200, issued.text)
         info = issued.json()
         self.assertIsNone(info["sent_at"])
+        self.assertEqual(info["status"], "GENERATED")
+        self.assertIsNotNone(info["receipt_id"])
         self.assertEqual(info["balance_after_paise"], 100_000)
         self.assertEqual(self.client.post(endpoint, json={"language": "en-IN"}).json(), info)
         url = "/api/receipts/share/" + info["share_token"]
@@ -84,11 +90,138 @@ class ConfirmationReceiptTest(unittest.TestCase):
         self.assertIn("Ramesh", hindi.text)
         self.assertIn("₹1000", hindi.text)
         self.assertEqual(hindi.headers["cache-control"], "no-store")
+        self.assertEqual(hindi.headers["referrer-policy"], "no-referrer")
+        self.assertIn("frame-ancestors 'none'", hindi.headers["content-security-policy"])
         self.assertIn("Balance after transaction", self.client.get(url, params={"language": "en-IN"}).text)
         self.assertEqual(self.client.get("/api/receipts/share/" + "x" * 43).status_code, 404)
         sent = self.client.post(endpoint + "/sent").json()
         self.assertIsNotNone(sent["sent_at"])
+        self.assertEqual(sent["status"], "SENT")
         self.assertEqual(sent, self.client.post(endpoint + "/sent").json())
+
+    def test_public_token_is_scoped_and_confirmation_is_idempotent(self) -> None:
+        with ledger_session(self.path, write=True) as ledger:
+            other = ledger.create_customer(DEFAULT_SHOP_ID, "Other <script>alert(1)</script>")
+            other_entry = ledger.create_ledger_entry(
+                DEFAULT_SHOP_ID, "other", LedgerEntryDraft(other.id, "CREDIT", 2_031),
+            )
+        with patch.dict(environ, {"PUBLIC_RECEIPT_ORIGIN": "https://receipts.example.com"}):
+            with TestClient(create_app(self.path)) as public_client:
+                info = public_client.post(f"/api/receipts/{self.initial.id}", json={"language": "en-IN"}).json()
+                self.assertRegex(info["share_token"], r"^[A-Za-z0-9_-]{43}$")
+                self.assertEqual(info["share_url"], "https://receipts.example.com/api/receipts/share/" + info["share_token"])
+        other_info = self.client.post(f"/api/receipts/{other_entry.id}", json={"language": "hi-IN"}).json()
+        self.assertNotEqual(info["share_token"], other_info["share_token"])
+        url = "/api/receipts/share/" + info["share_token"]
+        english = self.client.get(url)
+        self.assertIn('lang="en-IN"', english.text)
+        self.assertIn("Listen to receipt", english.text)
+        self.assertNotIn("Other", english.text)
+        other_page = self.client.get("/api/receipts/share/" + other_info["share_token"])
+        self.assertIn("Other &lt;script&gt;alert(1)&lt;/script&gt;", other_page.text)
+        self.assertNotIn("Ramesh", other_page.text)
+        for bad_token in ("invalid", "x" * 43):
+            bad_url = f"/api/receipts/share/{bad_token}"
+            response = self.client.get(bad_url, params={"language": "en-IN"})
+            self.assertEqual(response.status_code, 404)
+            self.assertIn("This receipt could not be found.", response.text)
+            self.assertEqual(self.client.post(bad_url + "/confirm").status_code, 404)
+            self.assertEqual(self.client.post(bad_url + "/dispute", json={
+                "claimed_amount_paise": 300, "reason": "Wrong amount",
+            }).status_code, 404)
+        self.assertEqual(self.client.post(url + "/confirm").status_code, 204)
+        confirmed = self.client.get("/api/receipts").json()[1]
+        self.assertEqual(confirmed["status"], "CONFIRMED")
+        self.assertIsNotNone(confirmed["confirmed_at"])
+        self.assertEqual(self.client.post(url + "/confirm").status_code, 204)
+        self.assertEqual(self.client.get("/api/receipts").json()[1], confirmed)
+        self.assertEqual(self.client.post(url + "/dispute", json={
+            "claimed_amount_paise": 300, "reason": "Wrong amount",
+        }).json()["detail"], "RECEIPT_ALREADY_CONFIRMED")
+        self.assertIn("You confirmed this transaction.", self.client.get(url).text)
+
+    def test_payment_dispute_creates_one_adjustment_and_preserves_history(self) -> None:
+        with ledger_session(self.path, write=True) as ledger:
+            original = ledger.create_ledger_entry(
+                DEFAULT_SHOP_ID, "original-payment", LedgerEntryDraft(self.customer.id, "PAYMENT", 20_000),
+            )
+        endpoint = f"/api/receipts/{original.id}"
+        issued = self.client.post(endpoint, json={"language": "hi-IN"}).json()
+        public_url = "/api/receipts/share/" + issued["share_token"]
+        claim = {"claimed_amount_paise": "30000", "reason": "  I paid ₹300 in cash.  "}
+        for amount in (-200, 20_000, "9223372036854775808", True, 30000.5):
+            response = self.client.post(public_url + "/dispute", json={**claim, "claimed_amount_paise": amount})
+            self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(self.client.post(public_url + "/dispute", json={**claim, "reason": " "}).status_code, 422)
+        self.assertEqual(self.client.post(public_url + "/dispute", json=claim).status_code, 204)
+        self.assertEqual(self.client.post(public_url + "/dispute", json=claim).status_code, 204)
+        self.assertEqual(self.client.post(public_url + "/dispute", json={**claim, "reason": "Different"}).status_code, 409)
+        self.assertEqual(self.client.post(public_url + "/confirm").json()["detail"], "RECEIPT_ALREADY_DISPUTED")
+        pending = self.client.get("/api/receipts").json()[0]
+        self.assertEqual(pending["status"], "DISPUTED")
+        self.assertEqual(pending["dispute"]["status"], "PENDING")
+        self.assertEqual(pending["dispute"]["adjustment_paise"], -10_000)
+        self.assertEqual(pending["dispute"]["reason"], "I paid ₹300 in cash.")
+
+        decision = {"decision": "APPROVED", "reviewer": "Kirana owner"}
+        review = endpoint + "/dispute/review"
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            responses = list(workers.map(lambda _: self.client.post(review, json=decision), range(2)))
+        for response in responses:
+            self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(responses[0].json(), responses[1].json())
+        resolved = responses[0].json()
+        self.assertEqual(resolved["balance_after_paise"], 80_000)
+        self.assertEqual(resolved["dispute"]["reviewed_by"], "Kirana owner")
+        self.assertEqual(resolved["dispute"]["status"], "APPROVED")
+        self.assertIsNotNone(resolved["dispute"]["reviewed_at"])
+        self.assertEqual(self.client.post(review, json={**decision, "decision": "REJECTED"}).status_code, 409)
+        self.assertIn("accepted your correction", self.client.get(public_url, params={"language": "en-IN"}).text)
+        self.assertNotIn("Kirana owner", self.client.get(public_url).text)
+        self.assertEqual(self.client.get(f"/api/customers/{self.customer.id}").json()["balance_paise"], 70_000)
+        url = f"/api/customers/{self.customer.id}/ledger"
+        first = self.client.get(url, params={"limit": 1}).json()
+        adjustment, = first["items"]
+        self.assertEqual(
+            [adjustment[field] for field in ("type", "amount_paise", "balance_after_paise", "corrects_entry_id")],
+            ["ADJUSTMENT", -10_000, 70_000, original.id],
+        )
+        self.assertEqual(adjustment["id"], resolved["dispute"]["adjustment_entry_id"])
+        older = self.client.get(url, params={"limit": 5, "cursor": first["next_cursor"]}).json()
+        self.assertEqual([(item["id"], item["amount_paise"]) for item in older["items"]],
+                         [(original.id, 20_000), (self.initial.id, 100_000)])
+        self.assertFalse(older["has_more"])
+
+    def test_rejection_leaves_ledger_unchanged_and_audits_reviewer(self) -> None:
+        endpoint = f"/api/receipts/{self.initial.id}"
+        info = self.client.post(endpoint, json={"language": "en-IN"}).json()
+        url = "/api/receipts/share/" + info["share_token"]
+        self.assertEqual(self.client.post(url + "/dispute", json={
+            "claimed_amount_paise": 0, "reason": "No credit was taken",
+        }).status_code, 204)
+        reply = self.client.post(endpoint + "/dispute/review", json={"decision": "REJECTED", "reviewer": "Shop owner"})
+        self.assertEqual(reply.status_code, 200, reply.text)
+        dispute = reply.json()["dispute"]
+        self.assertEqual(dispute["status"], "REJECTED")
+        self.assertEqual(dispute["reviewed_by"], "Shop owner")
+        self.assertIsNotNone(dispute["reviewed_at"])
+        self.assertIsNone(dispute["adjustment_entry_id"])
+        self.assertIn("rejected your correction", self.client.get(url).text)
+        self.assertEqual(self.client.get(f"/api/customers/{self.customer.id}").json()["balance_paise"], 100_000)
+        self.assertEqual(len(self.client.get(f"/api/customers/{self.customer.id}/ledger").json()), 1)
+
+    def test_large_receipt_amounts_preserve_every_paise(self) -> None:
+        with ledger_session(self.path, write=True) as ledger:
+            entry = ledger.create_ledger_entry(
+                DEFAULT_SHOP_ID, "large-credit", LedgerEntryDraft(self.customer.id, "CREDIT", MAX_SQLITE_INTEGER),
+            )
+        reply = self.client.post(f"/api/receipts/{entry.id}", json={"language": "en-IN"})
+        self.assertEqual(reply.status_code, 200, reply.text)
+        item = reply.json()
+        self.assertEqual(item["amount_paise"], str(MAX_SQLITE_INTEGER))
+        self.assertEqual(item["balance_after_paise"], str(MAX_SQLITE_INTEGER + 100_000))
+        shared = self.client.get("/api/receipts/share/" + item["share_token"])
+        self.assertIn("₹92233720368547758.07", shared.text)
 
     def test_stitch_seed_uses_real_balances_and_three_awaiting_receipts(self) -> None:
         with TemporaryDirectory() as folder:
