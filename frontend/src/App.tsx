@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { BookOpenText, Mic, ReceiptText, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import Customers from './Customers'
@@ -18,7 +19,7 @@ function getPage() {
   return pages.find(({ id }) => window.location.hash === '#' + id) ?? pages[1]
 }
 
-export default function App() {
+export default function App({ accountActions }: { accountActions?: ReactNode } = {}) {
   const { t, i18n } = useTranslation()
   const [page, setPage] = useState(getPage)
   const main = useRef<HTMLElement>(null)
@@ -56,11 +57,14 @@ export default function App() {
             <div><p className="brand-name">{t('screens.brand')}</p><p className="tagline" lang="en-IN">{t('screens.tagline')}</p></div>
           </div>
         ) : <h1>{title}</h1>}
-        <LanguageSelect compact label={t('common.language')} locales={interfaceLocales} value={language}
+        <div className="account-controls">
+          <LanguageSelect compact label={t('common.language')} locales={interfaceLocales} value={language}
           onChange={(locale) => {
             saveLanguage('interface', locale)
             void i18n.changeLanguage(locale)
           }} />
+          {accountActions}
+        </div>
       </header>
       <main className="page-content" id="main-content" ref={main} tabIndex={-1}>
         <div key={page.id} className="page-enter"><Page language={language} /></div>

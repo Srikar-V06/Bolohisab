@@ -2,7 +2,7 @@
 
 ## Backend authentication
 
-Registration, session, CSRF, and role access are documented in the [frontend/backend contract](docs/FRONTEND_BACKEND_CONTRACT.md). The authentication branch provides the backend endpoints. The shopkeeper UI needs the separate sign-in integration before it can load protected data.
+Registration, session, CSRF, and role access are documented in the [frontend/backend contract](docs/FRONTEND_BACKEND_CONTRACT.md). Open the app and select Shopkeeper or Customer to register or sign in. The shopkeeper workspace contains Speak, Customers, and Receipts. Customers see their linked ledgers and receipts in My account.
 
 To create sample accounts and linked ledger data in a development database, run:
 
