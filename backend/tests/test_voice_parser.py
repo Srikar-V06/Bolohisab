@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
+from auth_test_support import authenticate_existing_shop
 
 from app.database import DEFAULT_SHOP_ID, database_transaction
 from app.language_detector import TranscriptLanguage, detect_language
@@ -86,6 +87,7 @@ class VoiceApiTest(unittest.TestCase):
         directory = self.enterContext(TemporaryDirectory())
         self.path = Path(directory) / "voice.sqlite3"
         self.client = self.enterContext(TestClient(create_app(self.path)))
+        authenticate_existing_shop(self.client, self.path)
         with ledger_session(self.path, write=True) as ledger:
             self.ramesh = ledger.create_customer(DEFAULT_SHOP_ID, "Ramesh")
             self.suresh = ledger.create_customer(DEFAULT_SHOP_ID, "Suresh")

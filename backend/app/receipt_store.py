@@ -22,6 +22,7 @@ class ReceiptDispute:
     status: DisputeStatus
     created_at: str
     reviewed_by: str | None
+    reviewed_by_user_id: int | None
     reviewed_at: str | None
     adjustment_entry_id: int | None
 
@@ -77,7 +78,7 @@ def _read_items(
                receipt.id AS receipt_id, receipt.issued_at, receipt.sent_at, receipt.confirmed_at,
                receipt.language, receipt.share_token, dispute.id AS dispute_id,
                dispute.claimed_amount_paise, dispute.reason, dispute.status AS dispute_status,
-               dispute.created_at AS requested_at, dispute.reviewed_by, dispute.reviewed_at,
+               dispute.created_at AS requested_at, dispute.reviewed_by, dispute.reviewed_by_user_id, dispute.reviewed_at,
                dispute.adjustment_entry_id
         FROM ledger_entries AS entry
         JOIN customers AS customer ON customer.shop_id = entry.shop_id AND customer.id = entry.customer_id
@@ -98,17 +99,17 @@ def _read_items(
         customer = values["customer_id"]
         balances[customer] = balances.get(customer, 0) + values.pop("balance_effect_paise")
         language = values.pop("language")
-        dispute_id, claim, reason, dispute_status, requested_at, reviewer, reviewed_at, adjustment = (
+        dispute_id, claim, reason, dispute_status, requested_at, reviewer, reviewer_id, reviewed_at, adjustment = (
             values.pop(key) for key in (
                 "dispute_id", "claimed_amount_paise", "reason", "dispute_status", "requested_at",
-                "reviewed_by", "reviewed_at", "adjustment_entry_id",
+                "reviewed_by", "reviewed_by_user_id", "reviewed_at", "adjustment_entry_id",
             )
         )
         dispute = None
         if dispute_id is not None:
             dispute = ReceiptDispute(
                 dispute_id, claim, _change_in_balance(values["type"], values["amount_paise"], claim),
-                reason, dispute_status, requested_at, reviewer, reviewed_at, adjustment,
+                reason, dispute_status, requested_at, reviewer, reviewer_id, reviewed_at, adjustment,
             )
         status: ReceiptStatus
         if dispute:
@@ -230,6 +231,7 @@ def dispute_shared_receipt(
 
 def review_receipt_dispute(
     connection: sqlite3.Connection, shop_id: int, entry_id: int, decision: DisputeDecision, reviewer: str,
+    reviewer_id: int,
 ) -> ReceiptItem:
     item = _entry_item(connection, shop_id, entry_id)
     dispute = item.dispute
@@ -250,10 +252,10 @@ def review_receipt_dispute(
     connection.execute(
         """
         UPDATE correction_requests
-        SET status = ?, reviewed_by = ?, reviewed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        SET status = ?, reviewed_by = ?, reviewed_by_user_id = ?, reviewed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
             adjustment_entry_id = ?
         WHERE shop_id = ? AND id = ?
         """,
-        (decision, reviewer, adjustment_id, shop_id, dispute.id),
+        (decision, reviewer, reviewer_id, adjustment_id, shop_id, dispute.id),
     )
     return _entry_item(connection, shop_id, entry_id)

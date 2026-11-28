@@ -2,10 +2,16 @@ import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import Thread
+from time import time
 from typing import AsyncIterator, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from .auth import auth_config, router as auth_router
 from .customers import router as customer_router
 from .database import check_database, database_path as configured_database_path, initialize_database
 from .local_model import LocalModelAdapter, configured_model
@@ -28,9 +34,22 @@ def create_app(database_path: Path | None = None, local_model: LocalModelAdapter
     app.state.database_path = path
     app.state.local_model = local_model
     app.state.public_receipt_origin = public_receipt_origin()
+    app.state.auth_config = config = auth_config()
+    app.state.auth_clock = lambda: int(time())
+    app.add_middleware(CORSMiddleware, allow_origins=config.origins, allow_credentials=True,
+                       allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+                       allow_headers=["Content-Type", "X-CSRF-Token"], expose_headers=["Retry-After"])
+    app.include_router(auth_router)
     app.include_router(customer_router)
     app.include_router(voice_router)
     app.include_router(receipt_router)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path.startswith("/api/auth/"):
+            # Pydantic validation details can otherwise echo input, including raw passwords.
+            return JSONResponse({"detail": "INVALID_AUTH_INPUT"}, status_code=422)
+        return await request_validation_exception_handler(request, error)
 
     @app.get("/api/health", tags=["health"])
     def health() -> dict[str, Literal["ok", "connected"]]:

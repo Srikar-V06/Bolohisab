@@ -7,6 +7,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from auth_test_support import TEST_REVIEWER, authenticate_existing_shop
 
 from app.database import DEFAULT_SHOP_ID, connect_database, database_transaction
 from app.ledger import MAX_SQLITE_INTEGER, LedgerEntryDraft, ledger_session
@@ -19,6 +20,7 @@ class ConfirmationReceiptTest(unittest.TestCase):
         folder = self.enterContext(TemporaryDirectory())
         self.path = Path(folder) / "receipts.sqlite3"
         self.client = self.enterContext(TestClient(create_app(self.path)))
+        authenticate_existing_shop(self.client, self.path)
         with ledger_session(self.path, write=True) as ledger:
             self.customer = ledger.create_customer(DEFAULT_SHOP_ID, "Ramesh")
             self.initial = ledger.create_ledger_entry(
@@ -107,6 +109,7 @@ class ConfirmationReceiptTest(unittest.TestCase):
             )
         with patch.dict(environ, {"PUBLIC_RECEIPT_ORIGIN": "https://receipts.example.com"}):
             with TestClient(create_app(self.path)) as public_client:
+                authenticate_existing_shop(public_client, self.path)
                 info = public_client.post(f"/api/receipts/{self.initial.id}", json={"language": "en-IN"}).json()
                 self.assertRegex(info["share_token"], r"^[A-Za-z0-9_-]{43}$")
                 self.assertEqual(info["share_url"], "https://receipts.example.com/api/receipts/share/" + info["share_token"])
@@ -172,7 +175,8 @@ class ConfirmationReceiptTest(unittest.TestCase):
         self.assertEqual(responses[0].json(), responses[1].json())
         resolved = responses[0].json()
         self.assertEqual(resolved["balance_after_paise"], 80_000)
-        self.assertEqual(resolved["dispute"]["reviewed_by"], "Kirana owner")
+        self.assertEqual(resolved["dispute"]["reviewed_by"], TEST_REVIEWER)
+        self.assertEqual(resolved["dispute"]["reviewed_by_user_id"], self.client.get("/api/auth/me").json()["id"])
         self.assertEqual(resolved["dispute"]["status"], "APPROVED")
         self.assertIsNotNone(resolved["dispute"]["reviewed_at"])
         self.assertEqual(self.client.post(review, json={**decision, "decision": "REJECTED"}).status_code, 409)
@@ -203,7 +207,7 @@ class ConfirmationReceiptTest(unittest.TestCase):
         self.assertEqual(reply.status_code, 200, reply.text)
         dispute = reply.json()["dispute"]
         self.assertEqual(dispute["status"], "REJECTED")
-        self.assertEqual(dispute["reviewed_by"], "Shop owner")
+        self.assertEqual(dispute["reviewed_by"], TEST_REVIEWER)
         self.assertIsNotNone(dispute["reviewed_at"])
         self.assertIsNone(dispute["adjustment_entry_id"])
         self.assertIn("rejected your correction", self.client.get(url).text)
@@ -229,6 +233,7 @@ class ConfirmationReceiptTest(unittest.TestCase):
             self.assertTrue(seed_stitch_preview(path))
             self.assertFalse(seed_stitch_preview(path))
             with TestClient(create_app(path)) as client:
+                authenticate_existing_shop(client, path)
                 customers = client.get("/api/customers").json()
                 self.assertEqual({row["name"]: row["balance_paise"] for row in customers},
                                  {"Ramesh Kumar": 125_000, "Sunita Devi": 240_000, "Suresh": 85_000, "Mohan": 0})
@@ -253,6 +258,7 @@ class ConfirmationReceiptTest(unittest.TestCase):
             finally:
                 connection.close()
             with TestClient(create_app(path)) as client:
+                authenticate_existing_shop(client, path)
                 issued_before, = client.get("/api/receipts").json()
                 self.assertIsNotNone(issued_before["issued_at"])
                 self.assertIsNone(issued_before["share_token"])

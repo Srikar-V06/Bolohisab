@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, StrictInt
 
-from .database import DEFAULT_SHOP_ID
+from .auth import OwnedShop
 from .language_detector import TranscriptLanguage, detect_language
 from .ledger import (
     MAX_SQLITE_INTEGER, CustomerIdentity, Ledger, LedgerEntryDraft, PaymentMethodCode,
@@ -84,12 +84,12 @@ def _ledger_drafts(actions: list[ParsedAction]) -> tuple[LedgerEntryDraft, ...]:
     )
 
 
-def _balance_previews(ledger: Ledger, actions: list[ParsedAction]) -> tuple[BalancePreview, ...]:
+def _balance_previews(ledger: Ledger, shop_id: int, actions: list[ParsedAction]) -> tuple[BalancePreview, ...]:
     customers = {action.customer.id: action.customer for action in actions}
     drafts = _ledger_drafts(actions)
     previews = []
     for customer in customers.values():
-        previous = ledger.calculate_balance(DEFAULT_SHOP_ID, customer.id)
+        previous = ledger.calculate_balance(shop_id, customer.id)
         entries = [entry for entry in drafts if entry.customer_id == customer.id]
         previews.append(BalancePreview(
             customer,
@@ -102,15 +102,15 @@ def _balance_previews(ledger: Ledger, actions: list[ParsedAction]) -> tuple[Bala
 
 
 @router.post("/parse")
-def parse_voice(payload: VoiceParseRequest, request: Request) -> VoiceParseResult:
+def parse_voice(payload: VoiceParseRequest, request: Request, shop_id: OwnedShop) -> VoiceParseResult:
     transcript = payload.original_transcript
     language = detect_language(transcript)
     message_language = language or TranscriptLanguage(payload.interface_language)
     try:
         with ledger_session(request.app.state.database_path) as ledger:
-            actions = parse_transcript(transcript, ledger.list_customer_names(DEFAULT_SHOP_ID),
+            actions = parse_transcript(transcript, ledger.list_customer_names(shop_id),
                                        fallback=request.app.state.local_model)
-            balances = _balance_previews(ledger, actions)
+            balances = _balance_previews(ledger, shop_id, actions)
     except ClarificationRequired as error:
         return VoiceParseResult(
             original_transcript=transcript,
@@ -135,7 +135,7 @@ def parse_voice(payload: VoiceParseRequest, request: Request) -> VoiceParseResul
 
 
 @router.post("/confirm")
-def confirm_voice(payload: VoiceConfirmRequest, request: Request) -> TransactionBatch:
+def confirm_voice(payload: VoiceConfirmRequest, request: Request, shop_id: OwnedShop) -> TransactionBatch:
     transcript = payload.original_transcript
     language = detect_language(transcript)
     batch_id = str(payload.batch_id)
@@ -149,7 +149,7 @@ def confirm_voice(payload: VoiceConfirmRequest, request: Request) -> Transaction
         raise HTTPException(422, "INVALID_REVIEW") from error
 
     with ledger_session(request.app.state.database_path, write=True) as ledger:
-        committed = ledger.get_batch(DEFAULT_SHOP_ID, batch_id)
+        committed = ledger.get_batch(shop_id, batch_id)
         if committed is not None:
             if (committed.original_transcript != transcript or committed.detected_language != language
                     or tuple(entry.as_draft() for entry in committed.entries) != reviewed):
@@ -159,19 +159,19 @@ def confirm_voice(payload: VoiceConfirmRequest, request: Request) -> Transaction
         try:
             # ponytail: on a cache miss (server restarted since review) the model runs inside this write
             # transaction for a few seconds; precompute outside the session if concurrent writers appear.
-            parsed = parse_transcript(transcript, ledger.list_customer_names(DEFAULT_SHOP_ID),
+            parsed = parse_transcript(transcript, ledger.list_customer_names(shop_id),
                                       fallback=request.app.state.local_model)
         except ClarificationRequired as error:
             raise HTTPException(409, "STALE_REVIEW") from error
         if _ledger_drafts(parsed) != reviewed:
             raise HTTPException(409, "STALE_REVIEW")
         current = {
-            customer_id: ledger.calculate_balance(DEFAULT_SHOP_ID, customer_id)
+            customer_id: ledger.calculate_balance(shop_id, customer_id)
             for customer_id in {entry.customer_id for entry in reviewed}
         }
         if current != payload.previous_balances:
             raise HTTPException(409, "STALE_REVIEW")
         return ledger.create_transaction_batch(
-            DEFAULT_SHOP_ID, batch_id, reviewed,
+            shop_id, batch_id, reviewed,
             original_transcript=transcript, detected_language=language,
         )

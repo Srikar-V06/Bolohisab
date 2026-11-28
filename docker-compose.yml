@@ -4,6 +4,9 @@ services:
     environment:
       DATABASE_PATH: /data/bolohisaab.sqlite3
       PUBLIC_RECEIPT_ORIGIN: ${PUBLIC_RECEIPT_ORIGIN:-}
+      BOLO_ENV: ${BOLO_ENV:-development}
+      BOLO_ALLOWED_ORIGINS: ${BOLO_ALLOWED_ORIGINS-http://localhost:${BOLOHISAAB_PORT:-3000},http://127.0.0.1:${BOLOHISAAB_PORT:-3000},http://localhost:5173,http://127.0.0.1:5173}
+      BOLO_AUTH_TRUST_PROXY: "1"
     volumes:
       - sqlite_data:/data
     healthcheck:
