@@ -7,8 +7,10 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, StrictInt, StringConstraints
 
+from .auth import Authenticated, OwnedShop, Shopkeeper, validate_origin
+from .auth_store import linked_customer_scopes
 from .customers import CustomerId
-from .database import DEFAULT_SHOP_ID, database_transaction
+from .database import database_transaction
 from .localization import LanguageCode
 from .public_receipt import render_shared_receipt
 from .receipt_store import (
@@ -36,7 +38,7 @@ class DisputeClaim(BaseModel):
 class DisputeReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     decision: DisputeDecision
-    reviewer: ShortText
+    reviewer: ShortText | None = None
 
 
 def public_receipt_origin() -> str:
@@ -63,37 +65,51 @@ def _receipt_payload(item: ReceiptItem, origin: str) -> dict:
 
 
 @router.get("")
-def receipts(request: Request) -> list[dict]:
+def receipts(request: Request, session: Authenticated) -> list[dict]:
     with database_transaction(request.app.state.database_path) as connection:
-        return [_receipt_payload(item, request.app.state.public_receipt_origin)
-                for item in list_receipt_items(connection, DEFAULT_SHOP_ID)]
+        account = session.account
+        if account.shop_id is not None:
+            return [_receipt_payload(item, request.app.state.public_receipt_origin)
+                    for item in list_receipt_items(connection, account.shop_id)]
+        items = [
+            _receipt_payload(item, "")
+            for shop_id, customer_id in linked_customer_scopes(connection, account.id)
+            for item in list_receipt_items(connection, shop_id, customer_id)
+            if item.receipt_id is not None
+        ]
+        for item in items:
+            item["share_token"] = None
+            if item["dispute"]:
+                item["dispute"]["reviewed_by"] = None
+                item["dispute"]["reviewed_by_user_id"] = None
+        return sorted(items, key=lambda item: item["entry_id"], reverse=True)
 
 
 @router.post("/{entry_id}")
-def issue(entry_id: CustomerId, payload: ReceiptLanguage, request: Request) -> dict:
+def issue(entry_id: CustomerId, payload: ReceiptLanguage, request: Request, shop_id: OwnedShop) -> dict:
     with database_transaction(request.app.state.database_path, write=True) as connection:
         try:
-            item = generate_receipt(connection, DEFAULT_SHOP_ID, entry_id, payload.language)
+            item = generate_receipt(connection, shop_id, entry_id, payload.language)
         except ReceiptNotFound as error:
             raise HTTPException(404, "ENTRY_NOT_FOUND") from error
         return _receipt_payload(item, request.app.state.public_receipt_origin)
 
 
 @router.post("/{entry_id}/sent")
-def sent(entry_id: CustomerId, request: Request) -> dict:
+def sent(entry_id: CustomerId, request: Request, shop_id: OwnedShop) -> dict:
     with database_transaction(request.app.state.database_path, write=True) as connection:
         try:
-            item = mark_receipt_sent(connection, DEFAULT_SHOP_ID, entry_id)
+            item = mark_receipt_sent(connection, shop_id, entry_id)
         except ReceiptNotFound as error:
             raise HTTPException(404, "RECEIPT_NOT_FOUND") from error
         return _receipt_payload(item, request.app.state.public_receipt_origin)
 
 
 @router.post("/{entry_id}/dispute/review")
-def review(entry_id: CustomerId, payload: DisputeReview, request: Request) -> dict:
+def review(entry_id: CustomerId, payload: DisputeReview, request: Request, shop_id: OwnedShop, actor: Shopkeeper) -> dict:
     with database_transaction(request.app.state.database_path, write=True) as connection:
         try:
-            item = review_receipt_dispute(connection, DEFAULT_SHOP_ID, entry_id, payload.decision, payload.reviewer)
+            item = review_receipt_dispute(connection, shop_id, entry_id, payload.decision, actor.full_name, actor.id)
         except ReceiptNotFound as error:
             raise HTTPException(404, "DISPUTE_NOT_FOUND") from error
         except ReceiptConflict as error:
@@ -113,6 +129,7 @@ def shared(token: str, request: Request, language: LanguageCode | None = None) -
 
 @router.post("/share/{token}/confirm", status_code=204, response_class=Response)
 def customer_confirm(token: str, request: Request) -> Response:
+    validate_origin(request, public_receipt=True)
     with database_transaction(request.app.state.database_path, write=True) as connection:
         try:
             confirm_shared_receipt(connection, token)
@@ -125,6 +142,7 @@ def customer_confirm(token: str, request: Request) -> Response:
 
 @router.post("/share/{token}/dispute", status_code=204, response_class=Response)
 def customer_dispute(token: str, payload: DisputeClaim, request: Request) -> Response:
+    validate_origin(request, public_receipt=True)
     with database_transaction(request.app.state.database_path, write=True) as connection:
         try:
             dispute_shared_receipt(connection, token, int(payload.claimed_amount_paise), payload.reason)

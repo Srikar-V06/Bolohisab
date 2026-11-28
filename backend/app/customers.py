@@ -1,12 +1,14 @@
 import json
+import sqlite3
 from base64 import b64decode, urlsafe_b64encode
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request, status
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from .database import DEFAULT_SHOP_ID
+from .auth import Authenticated, OwnedShop
+from .auth_store import Account, linked_customer_scopes
 from .ledger import (
     MAX_SQLITE_INTEGER,
     Customer,
@@ -60,22 +62,42 @@ def _decode_cursor(token: str, customer_id: int) -> LedgerHistoryCursor:
 
 
 @router.get("")
-def list_customers(request: Request) -> list[Customer]:
+def list_customers(request: Request, session: Authenticated) -> list[Customer]:
     with ledger_session(request.app.state.database_path) as ledger:
-        return ledger.list_customers(DEFAULT_SHOP_ID)
+        account = session.account
+        if account.shop_id is not None:
+            return ledger.list_customers(account.shop_id)
+        return [ledger.get_customer(shop_id, customer_id)
+                for shop_id, customer_id in linked_customer_scopes(ledger.connection, account.id)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_customer(customer: CustomerCreate, request: Request) -> Customer:
+def create_customer(customer: CustomerCreate, request: Request, shop_id: OwnedShop) -> Customer:
     with ledger_session(request.app.state.database_path, write=True) as ledger:
-        return ledger.create_customer(DEFAULT_SHOP_ID, customer.name)
+        return ledger.create_customer(shop_id, customer.name)
+
+
+def _authorized_customer_shop(db: sqlite3.Connection, account: Account, customer_id: int) -> int:
+    if account.shop_id is not None:
+        return account.shop_id
+    shop = db.execute(
+        """
+        SELECT c.shop_id FROM customer_account_links AS link JOIN customers AS c ON c.id = link.customer_id
+        WHERE link.user_id = ? AND c.id = ?
+        """,
+        (account.id, customer_id),
+    ).fetchone()
+    if shop is None:
+        raise HTTPException(404, "Customer not found")
+    return shop["shop_id"]
 
 
 @router.get("/{customer_id}")
-def get_customer(customer_id: CustomerId, request: Request) -> Customer:
+def get_customer(customer_id: CustomerId, request: Request, session: Authenticated) -> Customer:
     with ledger_session(request.app.state.database_path) as ledger:
         try:
-            return ledger.get_customer(DEFAULT_SHOP_ID, customer_id)
+            shop_id = _authorized_customer_shop(ledger.connection, session.account, customer_id)
+            return ledger.get_customer(shop_id, customer_id)
         except CustomerNotFound as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -84,17 +106,26 @@ def get_customer(customer_id: CustomerId, request: Request) -> Customer:
 def get_customer_ledger(
     customer_id: CustomerId,
     request: Request,
+    session: Authenticated,
     limit: Annotated[int | None, Query(ge=1, le=50)] = None,
     cursor: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
 ) -> list[LedgerEntry] | LedgerPage:
     with ledger_session(request.app.state.database_path) as ledger:
         try:
+            account = session.account
+            shop_id = _authorized_customer_shop(ledger.connection, account, customer_id)
             if limit is None and cursor is None:
-                return ledger.get_transaction_history(DEFAULT_SHOP_ID, customer_id)
+                entries = ledger.get_transaction_history(shop_id, customer_id)
+                if account.role == "CUSTOMER":
+                    return [replace(entry, original_transcript=None, detected_language=None) for entry in entries]
+                return entries
             position = _decode_cursor(cursor, customer_id) if cursor is not None else None
-            items, following = ledger.get_transaction_history_page(DEFAULT_SHOP_ID, customer_id, limit or 5, position)
+            items, following = ledger.get_transaction_history_page(shop_id, customer_id, limit or 5, position)
         except CustomerNotFound as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+        if account.role == "CUSTOMER":
+            # A single shopkeeper voice transcript can mention other people in the same batch.
+            items = [replace(entry, original_transcript=None, detected_language=None) for entry in items]
         return LedgerPage(items, _encode_cursor(customer_id, following) if following else None, following is not None)

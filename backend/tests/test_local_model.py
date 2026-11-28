@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
+from auth_test_support import authenticate_existing_shop
 
 from app.database import DEFAULT_SHOP_ID
 from app.ledger import CustomerIdentity, ledger_session
@@ -94,6 +95,7 @@ class LocalModelTest(unittest.TestCase):
     def test_review_and_confirm_use_the_same_reading(self) -> None:
         model = StubModel(act("CREDIT", "Sunita", "300"))
         with TemporaryDirectory() as folder, TestClient(create_app(Path(folder) / "db.sqlite3", model)) as client:
+            authenticate_existing_shop(client, Path(folder) / "db.sqlite3")
             with ledger_session(Path(folder) / "db.sqlite3", write=True) as ledger:
                 ledger.create_customer(DEFAULT_SHOP_ID, "Sunita Devi")
             text = "Sunita didi ka 300 wala maal khate mein chadha do"

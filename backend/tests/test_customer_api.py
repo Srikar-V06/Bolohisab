@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
+from auth_test_support import authenticate_existing_shop
 
 from app.database import DEFAULT_SHOP_ID, database_transaction
 from app.ledger import LedgerEntryDraft, ledger_session
@@ -14,6 +15,7 @@ class CustomerApiTest(unittest.TestCase):
         folder = self.enterContext(TemporaryDirectory())
         self.path = Path(folder) / "customers.sqlite3"
         self.client = self.enterContext(TestClient(create_app(self.path)))
+        authenticate_existing_shop(self.client, self.path)
 
     def test_create_list_read_and_retrieve_ledger(self) -> None:
         self.assertEqual(self.client.get("/api/customers").json(), [])

@@ -1,5 +1,25 @@
 # BoloHisaab
 
+## Backend authentication
+
+Registration, session, CSRF, and role access are documented in the [frontend/backend contract](docs/FRONTEND_BACKEND_CONTRACT.md). The authentication branch provides the backend endpoints. The shopkeeper UI needs the separate sign-in integration before it can load protected data.
+
+To create sample accounts and linked ledger data in a development database, run:
+
+    docker compose exec backend python -m app.account_admin seed-demo
+
+Use these credentials only with a disposable development database.
+
+| Role | Phone | Demo password |
+| --- | --- | --- |
+| Shopkeeper | `+919000000001` | `Demo shopkeeper passphrase` |
+| Customer | `+919000000002` | `Demo customer one passphrase` |
+| Customer | `+919000000003` | `Demo customer two passphrase` |
+
+For an existing database, the migration preserves all shops and ledger rows. No account is created or assigned automatically. After independently verifying the shop owner, a trusted operator can provision the owner of an unclaimed shop with `python -m app.account_admin claim-shop --shop-id 1 --name "Verified owner" --phone +91…`. The command prompts for the password without echoing it. To link a registered customer to a specific ledger after verifying ownership of the account and record, run `python -m app.account_admin link-customer --customer-id 42 --phone +91…`. Run these commands in the backend container or with the intended `DATABASE_PATH`.
+
+Before migration, back up SQLite with SQLite's backup API or take a consistent backup while the service is stopped. Migration runs in a transaction. If application rollback is needed, stop the service and restore that backup before starting a schema-4 build. Keep a copy of the upgraded database for any intervening writes.
+
 BoloHisaab is a voice-first digital khata for Indian kirana shops. Its three screens are Speak, Customers, and Receipts. The app uses the existing FastAPI parser and SQLite ledger. No external API keys are required.
 
 ## Languages and voice
