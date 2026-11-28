@@ -154,6 +154,7 @@ def require_customer(session: Authenticated) -> Account:
 
 
 Shopkeeper = Annotated[Account, Depends(require_shopkeeper)]
+CustomerAccount = Annotated[Account, Depends(require_customer)]
 
 
 def require_store_owner(account: Shopkeeper) -> int:

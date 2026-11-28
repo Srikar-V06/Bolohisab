@@ -11,7 +11,7 @@ class TranscriptLanguage(StrEnum):
 
 _ROMAN_HINDI = re.compile(
     r"\b(?:khate|khaate|khata|khaata|rupaye|rupaya|udhar|udhaar|likh|diya|diye|usne|"
-    r"unhone|batao|kitna|baki|baaki|bakaya|sau|dedh|saadhe|paune|nakad|nagad|jama)\b"
+    r"unhone|batao|kitna|kitne|aaj|baki|baaki|bakaya|sau|dedh|saadhe|paune|nakad|nagad|jama)\b"
 )
 _ENGLISH_COMMAND = re.compile(
     r"^(?:please\s+)?(?:record|log|add|received|show|check|tell me|what|balance)\b|\bpaid\b"

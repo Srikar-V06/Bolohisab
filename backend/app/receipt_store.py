@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from dataclasses import dataclass
 from re import fullmatch
@@ -152,7 +153,20 @@ def generate_receipt(
             """,
             (shop_id, item.customer_id, entry_id, language, token_urlsafe(32)),
         )
-        return _entry_item(connection, shop_id, entry_id)
+        item = _entry_item(connection, shop_id, entry_id)
+        connection.execute("SAVEPOINT receipt_notification")
+        try:
+            connection.execute("""
+                INSERT INTO notifications(customer_user_id,store_id,store_customer_id,receipt_id)
+                SELECT customer_user_id,store_id,store_customer_id,? FROM store_customer_links
+                WHERE store_id=? AND store_customer_id=? AND status='ACTIVE'
+                ON CONFLICT(receipt_id,customer_user_id) DO NOTHING
+            """, (item.receipt_id, shop_id, item.customer_id))
+        except sqlite3.Error:
+            connection.execute("ROLLBACK TO receipt_notification")
+            logging.getLogger(__name__).exception("Notification failed for receipt %s", item.receipt_id)
+        finally:
+            connection.execute("RELEASE receipt_notification")
     return item
 
 
