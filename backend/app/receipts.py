@@ -64,6 +64,20 @@ def _receipt_payload(item: ReceiptItem, origin: str) -> dict:
     return data
 
 
+def customer_receipt_items(connection, shop_id, customer_id):
+    items = []
+    for item in list_receipt_items(connection, shop_id, customer_id):
+        if item.receipt_id is None:
+            continue
+        data = _receipt_payload(item, "")
+        data["share_token"] = None
+        if data["dispute"]:
+            data["dispute"]["reviewed_by"] = None
+            data["dispute"]["reviewed_by_user_id"] = None
+        items.append(data)
+    return items
+
+
 @router.get("")
 def receipts(request: Request, session: Authenticated) -> list[dict]:
     with database_transaction(request.app.state.database_path) as connection:
@@ -72,16 +86,10 @@ def receipts(request: Request, session: Authenticated) -> list[dict]:
             return [_receipt_payload(item, request.app.state.public_receipt_origin)
                     for item in list_receipt_items(connection, account.shop_id)]
         items = [
-            _receipt_payload(item, "")
+            item
             for shop_id, customer_id in linked_customer_scopes(connection, account.id)
-            for item in list_receipt_items(connection, shop_id, customer_id)
-            if item.receipt_id is not None
+            for item in customer_receipt_items(connection, shop_id, customer_id)
         ]
-        for item in items:
-            item["share_token"] = None
-            if item["dispute"]:
-                item["dispute"]["reviewed_by"] = None
-                item["dispute"]["reviewed_by_user_id"] = None
         return sorted(items, key=lambda item: item["entry_id"], reverse=True)
 
 

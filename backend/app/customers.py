@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request, status
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from .auth import Authenticated, OwnedShop
-from .auth_store import Account, linked_customer_scopes
+from .auth_store import Account, linked_customer_scopes, normalize_phone
 from .ledger import (
     MAX_SQLITE_INTEGER,
     Customer,
@@ -28,6 +28,12 @@ CustomerId = Annotated[int, Path(ge=1, le=MAX_SQLITE_INTEGER)]
 class CustomerCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str
+    phone_number: str | None = None
+
+    @field_validator("phone_number")
+    @classmethod
+    def validate_phone(cls, value: str | None) -> str | None:
+        return normalize_phone(value) if value is not None else None
 
     @field_validator("name")
     @classmethod
@@ -74,7 +80,11 @@ def list_customers(request: Request, session: Authenticated) -> list[Customer]:
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_customer(customer: CustomerCreate, request: Request, shop_id: OwnedShop) -> Customer:
     with ledger_session(request.app.state.database_path, write=True) as ledger:
-        return ledger.create_customer(shop_id, customer.name)
+        record = ledger.create_customer(shop_id, customer.name)
+        if customer.phone_number is not None:
+            ledger.connection.execute("UPDATE customers SET normalized_phone_number=? WHERE id=?",
+                                      (customer.phone_number, record.id))
+        return record
 
 
 def _authorized_customer_shop(db: sqlite3.Connection, account: Account, customer_id: int) -> int:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 DEFAULT_SHOP_ID = 1
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 def database_path() -> Path:
@@ -56,6 +56,9 @@ def initialize_database(path: Path) -> None:
         if version < 5:
             connection.executescript(Path(__file__).with_name("auth_migration.sql").read_text(encoding="utf-8"))
             connection.execute("PRAGMA user_version = 5")
+        if version < 6:
+            connection.executescript(Path(__file__).with_name("customer_portal_migration.sql").read_text(encoding="utf-8"))
+            connection.execute("PRAGMA user_version = 6")
 
 
 def check_database(path: Path) -> None:

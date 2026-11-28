@@ -13,6 +13,9 @@ from fastapi.responses import JSONResponse
 
 from .auth import auth_config, router as auth_router
 from .customers import router as customer_router
+from .customer_portal import router as portal_router
+from .invitations import router as invitation_router
+from .reports import router as report_router
 from .database import check_database, database_path as configured_database_path, initialize_database
 from .local_model import LocalModelAdapter, configured_model
 from .receipts import public_receipt_origin, router as receipt_router
@@ -43,6 +46,9 @@ def create_app(database_path: Path | None = None, local_model: LocalModelAdapter
     app.include_router(customer_router)
     app.include_router(voice_router)
     app.include_router(receipt_router)
+    app.include_router(invitation_router)
+    app.include_router(portal_router)
+    app.include_router(report_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):

@@ -111,6 +111,39 @@ _RULES = (
 )
 _GRAMMAR = tuple((intent, re.compile(rule, re.IGNORECASE)) for intent, rule in _RULES)
 
+
+class ReportIntent(StrEnum):
+    COLLECTIONS = "COLLECTIONS_QUERY"
+    CREDIT = "CREDIT_QUERY"
+    CUSTOMER_BALANCE = "CUSTOMER_BALANCE_QUERY"
+    TOP_OUTSTANDING = "TOP_OUTSTANDING_QUERY"
+    TRANSACTION_COUNT = "TRANSACTION_COUNT_QUERY"
+
+
+_REPORT_RULES = (
+    (ReportIntent.COLLECTIONS, r"how much money came in today|aaj kitne paise aaye|आज कितने पैसे आए|आज कितने पैसे आये"),
+    (ReportIntent.CREDIT, r"how much credit did i give today|aaj kitna udhaa?r diya|आज कितना उधार दिया"),
+    (ReportIntent.TOP_OUTSTANDING, r"who owes me the most|sabse (?:z|j)yada udhaa?r kiske paas hai|सबसे (?:ज़्यादा|ज्यादा|अधिक) उधार किसके पास है"),
+    (ReportIntent.TRANSACTION_COUNT, r"how many transactions (?:happened )?today|aaj kitne transactions hue|आज कितने (?:लेनदेन|लेन-देन|ट्रांजैक्शन|ट्रांज़ैक्शन|transactions) हुए"),
+    (ReportIntent.CUSTOMER_BALANCE, rf"how much does {_NAME} owe"),
+    (ReportIntent.CUSTOMER_BALANCE, rf"{_NAME} ka kitna udhaa?r baa?ki hai"),
+    (ReportIntent.CUSTOMER_BALANCE, rf"{_NAME} का कितना उधार (?:बाकी|बकाया) है"),
+)
+_REPORT_GRAMMAR = tuple((intent, re.compile(rule, re.IGNORECASE)) for intent, rule in _REPORT_RULES) + tuple(
+    (ReportIntent.CUSTOMER_BALANCE, rule) for intent, rule in _GRAMMAR if intent == Intent.BALANCE_QUERY
+)
+
+
+def parse_report(transcript: str, customers: Sequence[CustomerIdentity]):
+    text = " ".join(normalize("NFC", transcript).strip().rstrip("?.!।").split())
+    for intent, rule in _REPORT_GRAMMAR:
+        if match := rule.fullmatch(text):
+            if intent == ReportIntent.CUSTOMER_BALANCE:
+                draft = UnresolvedAction(Intent.BALANCE_QUERY, customer_name=match.groupdict().get("name"))
+                return intent, _resolve_customer(draft, customers, {}, 1)
+            return intent, None
+    raise ClarificationRequired(ClarificationCode.MISSING_INTENT, 1)
+
 # Explicit cross-script spelling equivalents. The stored customer name is returned verbatim.
 _NAME_EQUIVALENTS = {
     "रमेश": "ramesh", "सुरेश": "suresh", "सीता": "sita", "seeta": "sita",
